@@ -1,11 +1,9 @@
-// `link-claude-md`: CLAUDE.md へ ARCHITECTURE・GOTCHAS の @メンションを追記し、
+// `link-claude-md`: CLAUDE.md へ ARCHITECTURE の @メンションを追記し、
 // metatron.config.json が無ければ作る。
-// GOTCHAS は記録が有効で、台帳に中身があるときだけ対象にする(SessionStart の案内と同じ条件)。
 
 import fs from "node:fs"
 import { isMentionablePath, linkClaudeMd } from "../lib/claude-md.js"
 import { loadConfig } from "../lib/config.js"
-import type { Features } from "../lib/features.js"
 import {
   emitResult,
   emitWriteFailure,
@@ -15,7 +13,6 @@ import {
 
 export interface LinkContext {
   cwd: string
-  features: Features
 }
 
 function hasContent(filePath: string): boolean {
@@ -38,45 +35,69 @@ export function runLinkClaudeMd(ctx: LinkContext): void {
     )
     return
   }
-  const candidates = [
-    config.architectureRelative,
-    ...(ctx.features.gotchas && hasContent(config.gotchasPath)
-      ? [config.gotchasRelative]
-      : [])
-  ]
+  const candidates = [config.architectureRelative]
   // 空白か制御文字を含むパスは @メンションにできないので、残りだけを追記する。
   const relatives = candidates.filter(isMentionablePath)
   const skipped = candidates.filter((rel) => !isMentionablePath(rel))
   let configCreated = false
+  let result: ReturnType<typeof linkClaudeMd>
   try {
     // codiel は metatron.config.json の有無で metatron の利用を判定する。既定のパスのまま
     // 使うプロジェクトにも目印を残すため、無ければ最小の設定を作る。既存の設定は上書きしない。
-    // CLAUDE.md より先に作り、失敗したときは何も書き換えずに終える。
+    // CLAUDE.md より先に作り、CLAUDE.md の書き込みに失敗したときは作った設定ファイルを消す。
     configCreated = createConfigIfMissing(config.configPath)
-    const result = linkClaudeMd(config.docRoot, relatives)
-    emitResult(command, {
-      ok: true,
-      written: result.added.length > 0 || configCreated,
-      ...result,
-      skipped,
-      configPath: config.configPath,
-      configCreated,
-      warnings: config.warnings
-    })
+    result = linkClaudeMd(config.docRoot, relatives)
   } catch (error) {
+    // この実行で作った設定ファイルだけを戻す。既存の設定は触らない。
+    let configRemoveError: string | undefined
+    if (configCreated) {
+      try {
+        fs.rmSync(config.configPath, { force: true })
+        configCreated = false
+      } catch (removeError) {
+        configRemoveError = messageOf(removeError)
+      }
+    }
     emitWriteFailure(command, "write_failed", messageOf(error), {
       written: configCreated,
-      configCreated
+      configCreated,
+      ...(configRemoveError === undefined
+        ? {}
+        : {
+            configRemoveFailed: true,
+            configRemoveError: `作った設定ファイル ${config.configPath} を消せませんでした: ${configRemoveError}`
+          })
     })
+    return
   }
+  // 結果の出力は巻き戻しの対象にしない。CLAUDE.md を書いた後に設定ファイルを消さないためである。
+  emitResult(command, {
+    ok: true,
+    written: result.added.length > 0 || configCreated,
+    ...result,
+    skipped,
+    configPath: config.configPath,
+    configCreated,
+    warnings: config.warnings
+  })
 }
 
-function createConfigIfMissing(configPath: string): boolean {
+// 作れたら true、既にあれば false を返す。作った後の書き込みに失敗したら、作ったファイルを消して投げる。
+export function createConfigIfMissing(configPath: string): boolean {
+  let fd: number
   try {
-    fs.writeFileSync(configPath, '{\n  "version": 1\n}\n', { flag: "wx" })
-    return true
+    fd = fs.openSync(configPath, "wx")
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "EEXIST") return false
     throw error
   }
+  try {
+    fs.writeFileSync(fd, '{\n  "version": 1\n}\n')
+  } catch (error) {
+    fs.closeSync(fd)
+    fs.rmSync(configPath, { force: true })
+    throw error
+  }
+  fs.closeSync(fd)
+  return true
 }

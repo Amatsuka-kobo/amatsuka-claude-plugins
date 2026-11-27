@@ -7,7 +7,6 @@ import os from "node:os"
 import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import { afterAll, expect, test } from "vitest"
-import { ADR_ENV, type Features, GOTCHAS_ENV } from "../lib/features.js"
 import { runTs } from "../testing/run-ts.js"
 
 const HOOK = fileURLToPath(new URL("../inject-context.ts", import.meta.url))
@@ -19,9 +18,6 @@ const CLI = path.join(PLUGIN_ROOT, "scripts", "metatron.mjs")
 const FAULT_CONFIG = fileURLToPath(
   new URL("../testing/fault-config.mjs", import.meta.url)
 )
-
-const BOTH_ON: Features = { adr: true, gotchas: true }
-const BOTH_OFF: Features = { adr: false, gotchas: false }
 
 const tmpDirs: string[] = []
 afterAll(() => {
@@ -57,16 +53,11 @@ function project(files: Record<string, string>): string {
 
 function inject(
   cwd: string,
-  features: Features = BOTH_ON,
   extraEnv: NodeJS.ProcessEnv = {},
   event = "SessionStart"
 ): string | null {
   const env = { ...process.env }
   delete env.CLAUDE_PLUGIN_ROOT
-  delete env[ADR_ENV]
-  delete env[GOTCHAS_ENV]
-  if (features.adr) env[ADR_ENV] = "1"
-  if (features.gotchas) env[GOTCHAS_ENV] = "1"
   const out = runTs(HOOK, [], {
     cwd,
     env: { ...env, ...extraEnv },
@@ -86,24 +77,21 @@ function mustInject(...args: Parameters<typeof inject>): string {
   return content
 }
 
-const LINKED_CLAUDE_MD = "@docs/ARCHITECTURE.md\n@docs/GOTCHAS.md\n"
+const LINKED_CLAUDE_MD = "@docs/ARCHITECTURE.md\n"
 
-test("I1: 文書の本文は注入せず、CLI の絶対パスと更新・記録・委譲の案内を出す", () => {
+test("I1: 文書の本文は注入せず、CLI の絶対パスと更新・委譲の案内を出す", () => {
   const root = project({
     "docs/ARCHITECTURE.md": ARCH,
-    "docs/GOTCHAS.md": GOTCHAS,
     "CLAUDE.md": LINKED_CLAUDE_MD
   })
   const content = mustInject(root)
 
   expect(content).not.toContain("ARCH-BODY")
-  expect(content).not.toContain("GOTCHA-BODY")
   expect(content).toContain(`M = ${CLI}`)
-  expect(content).toContain("docs/ARCHITECTURE.md と docs/GOTCHAS.md")
+  expect(content).toContain("docs/ARCHITECTURE.md は metatron の管理下")
   expect(content).toContain(
-    "ARCHITECTURE・ADR の更新は、Skill ツールで metatron:updating-architecture を起動して行う。"
+    "ARCHITECTURE の更新は、Skill ツールで metatron:updating-architecture を起動して行う。"
   )
-  expect(content).toContain("ADR・GOTCHAS へ残すものが無いか確かめる。")
   expect(content).toContain(
     "サブエージェントも CLAUDE.md 経由で同じ文書を読む。"
   )
@@ -121,37 +109,17 @@ test("I2: ARCHITECTURE が無ければ init へ誘導し、CLI の案内も出�
   expect(content).not.toContain("updating-architecture")
 })
 
-test("I3: 2 変数が無効なら ADR・GOTCHAS の CLI と記録の案内を出さず、GOTCHAS は管理対象に数えない", () => {
-  const root = project({
-    "docs/ARCHITECTURE.md": ARCH,
-    "docs/GOTCHAS.md": GOTCHAS,
-    "CLAUDE.md": "@docs/ARCHITECTURE.md\n"
-  })
-  const content = mustInject(root, BOTH_OFF)
-
-  expect(content).not.toContain("get adr")
-  expect(content).not.toContain("append-gotcha")
-  expect(content).not.toContain("完了報告の前")
-  expect(content).not.toContain("docs/GOTCHAS.md")
-  expect(content).toContain(
-    "ARCHITECTURE の更新は、Skill ツールで metatron:updating-architecture を起動して行う。"
-  )
-  expect(content).not.toContain("CLAUDE.md に @")
-})
-
 test("I4: CLAUDE.md に @メンションが無ければ、足りないものを挙げて追記を促す", () => {
   const root = project({
     "docs/ARCHITECTURE.md": ARCH,
-    "docs/GOTCHAS.md": GOTCHAS,
-    ".claude/CLAUDE.md": "@../docs/ARCHITECTURE.md\n"
+    ".claude/CLAUDE.md": "# P\n"
   })
   const content = mustInject(root)
 
   expect(content).toContain(
-    "CLAUDE.md に @docs/GOTCHAS.md が無く、文書が読み込まれない。"
+    "CLAUDE.md に @docs/ARCHITECTURE.md が無く、文書が読み込まれない。"
   )
-  expect(systemMessageOf(root)).toContain("@docs/GOTCHAS.md が無く")
-  expect(content).not.toContain("@docs/ARCHITECTURE.md と")
+  expect(systemMessageOf(root)).toContain("@docs/ARCHITECTURE.md が無く")
 })
 
 test("I5: 旧 rules のディレクトリが残っていれば移行を促す", () => {
@@ -178,7 +146,7 @@ test("I6: 壊れた設定の理由を添える", () => {
 test("I7: 設定の解決が例外で失敗したら何も出さない(フェイルオープン)", () => {
   const root = project({ "docs/ARCHITECTURE.md": ARCH })
   expect(
-    inject(root, BOTH_ON, {
+    inject(root, {
       NODE_OPTIONS: `--import ${pathToFileURL(FAULT_CONFIG).href}`
     })
   ).toBe(null)
@@ -189,7 +157,7 @@ test("I8: SubagentStart の入力でも本文は注入しない", () => {
     "docs/ARCHITECTURE.md": ARCH,
     "CLAUDE.md": LINKED_CLAUDE_MD
   })
-  const content = mustInject(root, BOTH_ON, {}, "SubagentStart")
+  const content = mustInject(root, {}, "SubagentStart")
   expect(content).not.toContain("ARCH-BODY")
 })
 
@@ -213,7 +181,9 @@ test("I13: metatron.config.json が無ければ作るよう促す", () => {
   fs.mkdirSync(path.join(root, ".git"))
   write(root, "docs/ARCHITECTURE.md", ARCH)
   write(root, "CLAUDE.md", "@docs/ARCHITECTURE.md\n")
-  expect(mustInject(root, BOTH_OFF)).toContain("metatron.config.json が無く")
+  expect(mustInject(root)).toContain("metatron.config.json が無く")
+  // 文書の読み込みには影響しないので、画面には出さない
+  expect(systemMessageOf(root)).toBe(undefined)
 })
 
 test("I9: 旧 config の paths.rulesDir に残る rules も移行を促し、画面にも出す", () => {
@@ -231,10 +201,27 @@ test("I9: 旧 config の paths.rulesDir に残る rules も移行を促し、画
   expect(systemMessageOf(root)).toContain("ai/rules/")
 })
 
+test('I15: 旧版が拒否した paths.rulesDir("." など)なら、既定の置き場の旧 rules を移行の対象にする', () => {
+  for (const rulesDir of [".", "./", "", "/etc/rules", "../outside"]) {
+    const root = project({
+      "docs/ARCHITECTURE.md": ARCH,
+      "CLAUDE.md": LINKED_CLAUDE_MD,
+      ".claude/rules/metatron/conventions.md": "# 規約\n"
+    })
+    write(
+      root,
+      "metatron.config.json",
+      JSON.stringify({ version: 1, paths: { rulesDir } })
+    )
+    expect(mustInject(root), rulesDir).toContain(
+      "廃止した rules(.claude/rules/metatron/)が残っている。"
+    )
+  }
+})
+
 test("I10: 移行が要らなければ画面への表示は出さない", () => {
   const root = project({
     "docs/ARCHITECTURE.md": ARCH,
-    "docs/GOTCHAS.md": GOTCHAS,
     "CLAUDE.md": LINKED_CLAUDE_MD
   })
   expect(systemMessageOf(root)).toBe(undefined)
@@ -247,16 +234,30 @@ test("I11: 空白を含むパスは追記を促さず、paths を変えるよう
     "metatron.config.json",
     '{"version":1,"paths":{"architecture":"my docs/ARCH.md"}}'
   )
-  const content = mustInject(root, BOTH_OFF)
+  const content = mustInject(root)
   expect(content).toContain("my docs/ARCH.md は空白か制御文字を含むため")
   expect(content).not.toContain("/metatron:update で追記する")
+})
+
+test("I14: ADR・GOTCHAS の記録を促す案内を出さない(GOTCHAS の文書が残っていても)", () => {
+  const root = project({
+    "docs/ARCHITECTURE.md": ARCH,
+    "docs/GOTCHAS.md": GOTCHAS,
+    "CLAUDE.md": "@docs/ARCHITECTURE.md\n@docs/GOTCHAS.md\n"
+  })
+  // CLI の絶対パスはリポジトリの置き場の名前を含みうるので、除いてから調べる。
+  const content = mustInject(root).replaceAll(CLI, "")
+
+  expect(content).not.toContain("GOTCHA-BODY")
+  for (const word of ["gotcha", "ADR", "recording-gotchas", "append-gotcha"]) {
+    expect(content.toLowerCase(), word).not.toContain(word.toLowerCase())
+  }
+  expect(systemMessageOf(root)).toBe(undefined)
 })
 
 function systemMessageOf(cwd: string): string | undefined {
   const env = { ...process.env }
   delete env.CLAUDE_PLUGIN_ROOT
-  env[ADR_ENV] = "1"
-  env[GOTCHAS_ENV] = "1"
   const out = runTs(HOOK, [], {
     cwd,
     env,

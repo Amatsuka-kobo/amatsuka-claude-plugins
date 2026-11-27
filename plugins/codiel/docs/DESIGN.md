@@ -357,7 +357,7 @@ intent にだけ残す。
 | intent | 読む。関係する領域の制約をユーザーに示す |
 | design(標準)/ test-spec・dev-plan(軽量) | 読む。制約を設計・仕様・手順の前提にする |
 | review | 読む。制約への違反は severity high の所見にする |
-| intent-sync | 書く。取り込みを行う唯一のフェーズ。intent の `## 意図的な制約` の表の行をすべて取り込み、未写しの失敗の記録を写す |
+| intent-sync | 書く。取り込みを行う唯一のフェーズ。intent の `## 意図的な制約` の表の行を、確認で取り込まないと答えた行を除いてすべて取り込み、未写しの失敗の記録を写す。今回の変更で古くなった `## 目的`・`## 意図的な制約`・`## 非ゴール`・`## 失敗の記録` の記述を、承認を得て改訂・削除する |
 | finalize | 最後の intent-sync より後に出た失敗の記録を `## 失敗の記録` に書き足す。ほかのエントリとセクションは書き換えない |
 
 `knowledgeTarget` は、プロジェクトが `metatron.config.json` を持ち、metatron が構造の文書を管理しているかを
@@ -569,7 +569,7 @@ codiel が書くのは各フェーズの作業の単位・入出力・書いて�
 宣言し、hooks が書き込み制御に使う。
 
 以前は frontmatter の `tools` で権限を最小化した Agent を同梱し、「できないことは暴走もできない」を
-原則としていた。ADR-004(2026-09-23)で同梱を 2 体に絞り、intent 駆動化(2026-09-27)で残る
+原則としていた。2026-09-23 の決定(`docs/old/metatron/ADR.md` の ADR-004)で同梱を 2 体に絞り、intent 駆動化(2026-09-27)で残る
 `codiel-analyst`(init フェーズの廃止に伴い削除)と `codiel-test-designer` も撤去した。
 test-designer の「Bash を持たず、テスト仕様のディレクトリの spec.md と cases.md だけを書く」という
 権限は、test-spec の契約の tools 限定条項と `writing-test-specs` 本文の規律が代わりに担う。
@@ -648,7 +648,7 @@ dev-plan のドメインも同じ考え方である。hooks はエージェン�
 旧セクション「## Codiel ハーネス運用ルール」があれば承認を得て取り除く)。
 ARCHITECTURE は `/codiel:init` の対象ではない。ドメインマップの生成は metatron が行う。codiel は
 ドメインマップを作らない。
-GOTCHAS は `/codiel:init` の対象ではない。台帳の生成は metatron が行う。記録時に台帳が無ければ `append-gotcha` が台帳ごと作る。codiel は台帳を作らない。
+GOTCHAS は `/codiel:init` の対象ではない。codiel は台帳を作らない。
 `/codiel:run` は資産配置を行わず、B + C + D が揃っていることを初期化済みと判定する。B は `.claude/rules/codiel.md` が存在し、かつ `CLAUDE.md` に行全体が(前後の空白を除き)`## Codiel` と一致する行があること。C は `.codiel/config.json` が JSON のオブジェクトとして読め、`raguel` がオブジェクトであること(空のオブジェクトでよい)。D は `.codiel/runs` / `.codiel/reports` の 2 ディレクトリが存在し、`codiel-state gitignore` の `missing` が空であること。C と D は `/codiel:run` と `/codiel:init` で同じ条件にする。テストの仕様の置き場と run の文書の置き場(`testsDir`・`runsDir`)は、キーが無くても既定値(`docs/codiel/tests`・`docs/codiel/runs`)で動くため、C の判定には含めない。いずれかが揃っていないときは未初期化として、欠けた項目を名指しして `/codiel:init` を案内して終了する。以前の版で初期化したプロジェクトは C と D を満たさないので、`/codiel:init` をやり直す(§3)。
 
 以下 2 節の見出しは既定パスであり、`metatron.config.json` で変更されうる。
@@ -746,8 +746,8 @@ K12 の直後の codiel は、run の中で起きた失敗を何も残さなか�
 
 ### `.claude/rules/codiel.md`(← `assets/rules/codiel.md`)
 
-Codiel ハーネスを適切に運用するための決まり。ARCHITECTURE と GOTCHAS は metatron の資産であり、
-codiel はこの 2 つに触れないので、rules にも書かない。metatron が有る環境では、これらの
+Codiel ハーネスを適切に運用するための決まり。ARCHITECTURE は metatron の資産であり、
+codiel はこれに触れないので、rules にも書かない。metatron が有る環境では、この
 存在と扱い方は CLAUDE.md の @メンションと SessionStart の案内文を通して伝わる。
 
 文書の扱い:
@@ -904,7 +904,7 @@ Codiel は ARCHITECTURE のドメイン定義を読めないときも、`unscope
 ドメイン定義の可読性を委譲候補の条件に含めると、Codiel が受け入れられる正当な委譲経路まで塞ぐ。
 `codielHandoffCandidate` と `codielHarness.dirExists` の同値は、委譲判断用の事実と生の検出事実を分けるために残していた。
 
-文書と Codiel 固有資産をフィールドとして分けたのも同じ理由による。ARCHITECTURE / GOTCHAS は Codiel 専属の
+文書と Codiel 固有資産をフィールドとして分けたのも同じ理由による。ARCHITECTURE は Codiel 専属の
 資産ではなく、metatron が管理し Codiel 単体環境でも最小構成が存在しうるプロジェクトの文書である。
 `codielHarness` に文書の可読性を混ぜると、metatron だけを使う環境で「Codiel のハーネス」という名前の
 フィールドが文書の有無を語ることになる。

@@ -12,7 +12,6 @@ import path from "node:path";
 var CONFIG_FILENAME = "metatron.config.json";
 var SUPPORTED_VERSION = 1;
 var DEFAULT_ARCHITECTURE_PATH = "docs/ARCHITECTURE.md";
-var DEFAULT_GOTCHAS_PATH = "docs/GOTCHAS.md";
 function isPlainObject(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -26,6 +25,13 @@ function realpathOrSelf(dir) {
 function hasConfigFile(dir) {
   try {
     return fs.existsSync(path.join(dir, CONFIG_FILENAME));
+  } catch {
+    return false;
+  }
+}
+function existsGit(dir) {
+  try {
+    return fs.existsSync(path.join(dir, ".git"));
   } catch {
     return false;
   }
@@ -48,11 +54,12 @@ function gitToplevel(cwd) {
 }
 function findDocRoot(startDir) {
   const start = realpathOrSelf(path.resolve(startDir ?? process.cwd()));
+  if (hasConfigFile(start)) return start;
   const top = gitToplevel(start);
   let dir = start;
   while (true) {
     if (hasConfigFile(dir)) return dir;
-    if (top && dir === top) break;
+    if (top ? dir === top : existsGit(dir)) break;
     const parent = path.dirname(dir);
     if (parent === dir) break;
     dir = parent;
@@ -105,9 +112,7 @@ function defaultsFor(docRoot, warnings) {
     configPath: path.join(docRoot, CONFIG_FILENAME),
     configExists: false,
     architecturePath: path.resolve(docRoot, DEFAULT_ARCHITECTURE_PATH),
-    gotchasPath: path.resolve(docRoot, DEFAULT_GOTCHAS_PATH),
     architectureRelative: DEFAULT_ARCHITECTURE_PATH,
-    gotchasRelative: DEFAULT_GOTCHAS_PATH,
     warnings
   };
 }
@@ -160,21 +165,12 @@ function loadConfigInner(startDir) {
     "architecture",
     warnings
   );
-  const gotchas = resolveConfiguredPath(
-    docRoot,
-    paths?.gotchas,
-    DEFAULT_GOTCHAS_PATH,
-    "gotchas",
-    warnings
-  );
   return {
     docRoot,
     configPath,
     configExists,
     architecturePath: architecture.absolute,
-    gotchasPath: gotchas.absolute,
     architectureRelative: architecture.relative,
-    gotchasRelative: gotchas.relative,
     warnings
   };
 }
@@ -215,17 +211,6 @@ function emit(decision, reason) {
 }
 function pass() {
   process.exit(0);
-}
-
-// src/lib/features.ts
-var ADR_ENV = "AMATSUKA_METATRON_ENABLE_ADR";
-var GOTCHAS_ENV = "AMATSUKA_METATRON_ENABLE_GOTCHAS";
-function enabled(value) {
-  const normalized = value?.trim().toLowerCase();
-  return normalized === "1" || normalized === "true" || normalized === "on";
-}
-function readFeatures(env) {
-  return { adr: enabled(env[ADR_ENV]), gotchas: enabled(env[GOTCHAS_ENV]) };
 }
 
 // src/guard-docs.ts
@@ -323,33 +308,13 @@ function comparisonKey(abs, caseInsensitive) {
   const key = toSlash(resolved).normalize("NFC");
   return caseInsensitive ? key.toLowerCase() : key;
 }
-function disabledLine(label, env) {
-  return `${label} \u306E\u8A18\u9332\u306F\u7121\u52B9\u3067\u3059(\u6709\u52B9\u306B\u3059\u308B\u306B\u306F ${env}=1)\u3002`;
-}
 var SKILL_LINE = "\u66F4\u65B0\u306F Skill \u30C4\u30FC\u30EB\u3067 metatron:updating-architecture \u3092\u8D77\u52D5\u3057\u3001\u305D\u306E\u624B\u9806\u3067\u884C\u3063\u3066\u304F\u3060\u3055\u3044\u3002";
-function architectureReason(relative, cli, adrEnabled) {
+function architectureReason(relative, cli) {
   return [
     `${relative} \u306F metatron \u306E\u7BA1\u7406\u4E0B\u306B\u3042\u308A\u3001\u76F4\u63A5\u7DE8\u96C6\u3067\u304D\u307E\u305B\u3093(\u30BB\u30AF\u30B7\u30E7\u30F3\u5358\u4F4D\u306E\u5DEE\u5206\u78BA\u8A8D\u3068\u66F8\u5F0F\u691C\u8A3C\u306E\u305F\u3081)\u3002`,
     "ARCHITECTURE \u304C\u307E\u3060\u7121\u3044\u3068\u304D\u306F /metatron:init \u3067\u4F5C\u6210\u3057\u3066\u304F\u3060\u3055\u3044\u3002",
     SKILL_LINE,
-    adrEnabled ? "ADR \u306E\u8FFD\u52A0\u30FB\u72B6\u614B\u5909\u66F4\u3082\u540C\u3058\u30B9\u30AD\u30EB\u3067\u884C\u3063\u3066\u304F\u3060\u3055\u3044\u3002" : disabledLine("ADR", ADR_ENV),
     `CLI \u306E\u7D76\u5BFE\u30D1\u30B9\u3068\u5165\u529B\u306E\u66F8\u5F0F: node ${cli} get config`
-  ].join("\n");
-}
-function gotchasReason(relative, cli, gotchasEnabled) {
-  const head = `${relative} \u306F metatron \u306E\u7BA1\u7406\u4E0B\u306B\u3042\u308A\u3001\u76F4\u63A5\u7DE8\u96C6\u3067\u304D\u307E\u305B\u3093(\u8FFD\u8A18\u30FB\u63A1\u756A\u30FB\u66F8\u5F0F\u691C\u8A3C\u3068\u3001\u66F8\u304D\u63DB\u3048\u306E\u5DEE\u5206\u627F\u8A8D\u306E\u305F\u3081)\u3002\u65E2\u5B58\u30A8\u30F3\u30C8\u30EA\u306E\u66F8\u304D\u63DB\u3048\u306F updating-architecture \u30B9\u30AD\u30EB\u306E\u76E3\u67FB\u306E\u624B\u9806\u3067\u884C\u3044\u307E\u3059\u3002`;
-  if (!gotchasEnabled) {
-    return [head, disabledLine("GOTCHAS", GOTCHAS_ENV)].join("\n");
-  }
-  return [
-    head,
-    "\u30A8\u30F3\u30C8\u30EA\u306E JSON \u3092\u4E00\u6642\u30D5\u30A1\u30A4\u30EB\u306B\u66F8\u304D\u3001\u6B21\u306E\u30B3\u30DE\u30F3\u30C9\u3067\u8FFD\u8A18\u3057\u3066\u304F\u3060\u3055\u3044:",
-    `  node ${cli} append-gotcha --input /tmp/metatron-gotcha.json`,
-    "\u53F0\u5E33\u304C\u307E\u3060\u7121\u3044\u3068\u304D\u306F\u3001\u30E6\u30FC\u30B6\u30FC\u306E\u627F\u8A8D\u3092\u5F97\u3066\u304B\u3089\u65B0\u898F\u4F5C\u6210\u3057\u3066\u304F\u3060\u3055\u3044:",
-    `  node ${cli} init-gotchas`,
-    "\u65E2\u5B58\u30A8\u30F3\u30C8\u30EA\u3078\u306E\u30BF\u30B0\u4ED8\u4E0E(\u89E3\u6C7A\u6E08\u307F / \u5BFE\u8C61\u5916):",
-    `  node ${cli} tag-gotcha --id GOTCHA-003 --tag \u89E3\u6C7A\u6E08\u307F --reason "<\u7406\u7531>"`,
-    `\u5165\u529B\u306E\u66F8\u5F0F: node ${cli} get config`
   ].join("\n");
 }
 try {
@@ -368,10 +333,8 @@ try {
     config.architecturePath,
     caseInsensitive
   );
-  const gotchasKey = comparisonKey(config.gotchasPath, caseInsensitive);
   const cli = metatronCliPath();
   let hitArchitecture = false;
-  let hitGotchas = false;
   for (const raw of candidates) {
     const slashed = toSlash(raw);
     const joined = path2.isAbsolute(slashed) ? slashed : `${cwd}/${slashed}`;
@@ -381,17 +344,10 @@ try {
     ];
     for (const key of keys) {
       if (key === architectureKey) hitArchitecture = true;
-      if (key === gotchasKey) hitGotchas = true;
     }
   }
-  const features = readFeatures(process.env);
   if (hitArchitecture)
-    emit(
-      "deny",
-      architectureReason(config.architectureRelative, cli, features.adr)
-    );
-  if (hitGotchas)
-    emit("deny", gotchasReason(config.gotchasRelative, cli, features.gotchas));
+    emit("deny", architectureReason(config.architectureRelative, cli));
   pass();
 } catch {
   pass();

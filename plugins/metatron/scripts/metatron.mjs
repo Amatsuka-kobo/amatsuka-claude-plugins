@@ -1,26 +1,5 @@
 #!/usr/bin/env node
 
-// src/lib/features.ts
-var ADR_ENV = "AMATSUKA_METATRON_ENABLE_ADR";
-var GOTCHAS_ENV = "AMATSUKA_METATRON_ENABLE_GOTCHAS";
-var FEATURE_ENV = {
-  adr: ADR_ENV,
-  gotchas: GOTCHAS_ENV
-};
-function enabled(value) {
-  const normalized = value?.trim().toLowerCase();
-  return normalized === "1" || normalized === "true" || normalized === "on";
-}
-function readFeatures(env) {
-  return { adr: enabled(env[ADR_ENV]), gotchas: enabled(env[GOTCHAS_ENV]) };
-}
-
-// src/cli/adr-candidate.ts
-import path6 from "node:path";
-
-// src/lib/adr.ts
-import fs3 from "node:fs";
-
 // src/lib/architecture.ts
 var ARCHITECTURE_TITLE = "# ARCHITECTURE";
 var ARCHITECTURE_HEADINGS = [
@@ -31,24 +10,14 @@ var ARCHITECTURE_HEADINGS = [
   "\u30C9\u30E1\u30A4\u30F3\u30DE\u30C3\u30D7",
   "\u30B3\u30DE\u30F3\u30C9\u5B9A\u7FA9",
   "\u4FDD\u8B77\u30D1\u30B9",
-  "\u30C6\u30B9\u30C8\u65B9\u91DD",
-  "ADR \u4E00\u89A7"
+  "\u30C6\u30B9\u30C8\u65B9\u91DD"
 ];
-var ADR_HEADING = "ADR \u4E00\u89A7";
 var DOMAINS_HEADING = "\u30C9\u30E1\u30A4\u30F3\u30DE\u30C3\u30D7";
 var DOMAINS_MARKER = "metatron:domains";
 var RETIRED_PSEUDO_KEYS = /* @__PURE__ */ new Set(["overview"]);
 var UNCLOSED_FENCE_WARNING = "\u9589\u3058\u3066\u3044\u306A\u3044\u30B3\u30FC\u30C9\u30D5\u30A7\u30F3\u30B9\u304C\u3042\u308A\u307E\u3059\u3002\u672A\u9589\u30D5\u30A7\u30F3\u30B9\u4EE5\u964D\u3092 1 \u30BB\u30AF\u30B7\u30E7\u30F3\u3068\u3057\u3066\u6271\u3044\u307E\u3057\u305F\u3002";
 function normalizeNewlines(value) {
   return value.replace(/\r\n?/g, "\n");
-}
-function normalizeInputNewlines(input) {
-  if (input === null || typeof input !== "object") return input;
-  const out = {};
-  for (const [key, value] of Object.entries(input)) {
-    out[key] = typeof value === "string" ? normalizeNewlines(value) : Array.isArray(value) ? value.map((v) => typeof v === "string" ? normalizeNewlines(v) : v) : value;
-  }
-  return out;
 }
 function splitLines(text) {
   if (text === "") return [];
@@ -198,13 +167,6 @@ function validateHeadingKey(heading, options = {}) {
     };
   }
   const value = heading.trim();
-  if (value === ADR_HEADING) {
-    return {
-      ok: false,
-      error: "adr_heading",
-      message: "`ADR \u4E00\u89A7` \u306F stage-architecture \u3067\u306F\u5909\u66F4\u3067\u304D\u307E\u305B\u3093\u3002ADR \u306E\u8FFD\u52A0\u30FB\u72B6\u614B\u5909\u66F4\u306F stage-adr \u3092\u4F7F\u3063\u3066\u304F\u3060\u3055\u3044\u3002\u7BC0\u3054\u3068\u306E\u5DEE\u3057\u66FF\u3048\u3092\u8A31\u3059\u3068\u3001\u63A1\u756A\u30FB`\u72B6\u614B` \u306E\u5024\u57DF\u30FB\u72B6\u614B\u5909\u66F4\u5C65\u6B74\u306E\u8FFD\u8A18\u3092\u3059\u3079\u3066\u8FC2\u56DE\u3067\u304D\u308B\u305F\u3081\u3067\u3059\u3002"
-    };
-  }
   if (RETIRED_PSEUDO_KEYS.has(value.toLowerCase())) {
     return {
       ok: false,
@@ -429,7 +391,8 @@ function applySectionChanges(current, changes) {
         start: section.startLine,
         end: section.endLine,
         text: "",
-        order
+        order,
+        touchesEnd: section.endLine === lines.length
       });
       applied.push({ heading: change.heading, mode: "removed" });
       continue;
@@ -440,7 +403,8 @@ function applySectionChanges(current, changes) {
         start: section.startLine + 1,
         end: section.contentEndLine,
         text: body === "" ? "" : `${eol}${body}${eol}`,
-        order
+        order,
+        touchesEnd: section.endLine === lines.length
       });
       applied.push({ heading: change.heading, mode: "replaced" });
       continue;
@@ -469,7 +433,11 @@ function applySectionChanges(current, changes) {
   }
   ops.sort((a, b) => b.start - a.start || b.order - a.order);
   for (const op of ops) chunks.splice(op.start, op.end - op.start, op.text);
-  const next = chunks.join("");
+  let next = chunks.join("");
+  if (ops.some((op) => op.touchesEnd === true)) {
+    const endEol = /\r\n$/.test(text) ? "\r\n" : /\n$/.test(text) ? "\n" : eol;
+    next = next.replace(/(?:[ \t]*\r?\n)+$/, endEol);
+  }
   return rejectBrokenResult(text, next, warnings) ?? {
     ok: true,
     text: next,
@@ -498,14 +466,6 @@ function rejectBrokenResult(before, text, warnings) {
     };
   }
   return null;
-}
-function adrSectionSnapshot(text) {
-  const doc = parseArchitecture(text);
-  const section = findSection(doc, ADR_HEADING);
-  return {
-    count: doc.sections.filter((s) => s.heading === ADR_HEADING).length,
-    raw: section === void 0 ? "" : section.raw.replace(/\s+$/, "")
-  };
 }
 function prepareArchitectureUpdate(current, changes) {
   const warnings = [];
@@ -638,2259 +598,43 @@ function prepareArchitectureUpdate(current, changes) {
     }
   }
   const result = applySectionChanges(current, normalizedChanges);
-  if (result.ok) {
-    const before = adrSectionSnapshot(current ?? "");
-    const after = adrSectionSnapshot(result.text);
-    if (before.count !== after.count || before.raw !== after.raw) {
-      return {
-        ok: false,
-        error: "invalid_body",
-        message: `body \u304B\u3089 \`## ${ADR_HEADING}\` \u3092\u5909\u3048\u308B\u3053\u3068\u306F\u3067\u304D\u307E\u305B\u3093\u3002body \u306B \`## ${ADR_HEADING}\` \u306E\u898B\u51FA\u3057\u3084 ADR \u3092\u66F8\u304B\u305A\u3001ADR \u306E\u8FFD\u52A0\u30FB\u72B6\u614B\u5909\u66F4\u306F stage-adr \u3092\u4F7F\u3063\u3066\u304F\u3060\u3055\u3044\u3002`,
-        warnings: [...warnings, ...result.warnings]
-      };
-    }
-  }
   return { ...result, warnings: [...warnings, ...result.warnings] };
 }
 
-// src/lib/gotchas.ts
-import fs2 from "node:fs";
-import path2 from "node:path";
-
-// src/lib/atomic-write.ts
-import crypto from "node:crypto";
+// src/lib/config.ts
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-var MAX_LINK_HOPS = 40;
-function errnoCode(error) {
-  return error?.code;
-}
-function resolveWriteTarget(target) {
-  try {
-    return fs.realpathSync(target);
-  } catch (error) {
-    if (errnoCode(error) !== "ENOENT") throw error;
-  }
-  let current = path.resolve(target);
-  for (let hop = 0; hop < MAX_LINK_HOPS; hop++) {
-    let link;
-    try {
-      link = fs.readlinkSync(current);
-    } catch (error) {
-      const code = errnoCode(error);
-      if (code === "ENOENT" || code === "EINVAL") return current;
-      throw error;
-    }
-    current = path.resolve(path.dirname(current), link);
-  }
-  const err = new Error(
-    `ELOOP: too many symbolic links encountered, '${target}'`
-  );
-  err.code = "ELOOP";
-  throw err;
-}
-function existingMode(filePath) {
-  try {
-    return fs.statSync(filePath).mode & 4095;
-  } catch (error) {
-    if (errnoCode(error) === "ENOENT") return null;
-    throw error;
-  }
-}
-function writeFileAtomic(target, data) {
-  const dest = resolveWriteTarget(target);
-  fs.mkdirSync(path.dirname(dest), { recursive: true });
-  const mode = existingMode(dest);
-  const tmp = `${dest}.tmp-${crypto.randomUUID()}`;
-  try {
-    fs.writeFileSync(tmp, data);
-    if (mode !== null) fs.chmodSync(tmp, mode);
-    fs.renameSync(tmp, dest);
-  } catch (error) {
-    try {
-      fs.rmSync(tmp, { force: true });
-    } catch {
-    }
-    throw error;
-  }
-}
-
-// src/lib/gotchas.ts
-var GOTCHA_TAGS = ["\u89E3\u6C7A\u6E08\u307F", "\u5BFE\u8C61\u5916"];
-var LIST_SECTION_TITLE = "\u5931\u6557\u30D1\u30BF\u30FC\u30F3\u4E00\u89A7";
-var GotchaError = class extends Error {
-  code;
-  details;
-  constructor(code, message, details = []) {
-    super(message);
-    this.name = "GotchaError";
-    this.code = code;
-    this.details = details;
-  }
-};
-function stripCr(line) {
-  return line.endsWith("\r") ? line.slice(0, -1) : line;
-}
-var FENCE_OPEN_RE2 = /^ {0,3}(`{3,}|~{3,})/;
-var FENCE_CLOSE_RE2 = /^ {0,3}(`{3,}|~{3,})[ \t]*$/;
-function matchFenceOpen2(line) {
-  const m = FENCE_OPEN_RE2.exec(line);
-  if (m === null) return null;
-  return { char: m[1][0], count: m[1].length };
-}
-function isFenceClose2(line, fence) {
-  const m = FENCE_CLOSE_RE2.exec(line);
-  if (m === null) return false;
-  return m[1][0] === fence.char && m[1].length >= fence.count;
-}
-function scanFences2(lines, ignoreFences) {
-  const blocked = new Array(lines.length).fill(false);
-  if (ignoreFences) return { blocked, unclosedFence: false };
-  let fence = null;
-  for (let i = 0; i < lines.length; i++) {
-    const line = stripCr(lines[i]);
-    if (fence === null) {
-      const open = matchFenceOpen2(line);
-      if (open !== null) {
-        fence = open;
-        blocked[i] = true;
-      }
-      continue;
-    }
-    blocked[i] = true;
-    if (isFenceClose2(line, fence)) fence = null;
-  }
-  return { blocked, unclosedFence: fence !== null };
-}
-var SECTION_HEADING_RE = /^ {0,3}## (.*)$/;
-var SUB_HEADING_RE = /^ {0,3}### /;
-var ENTRY_HEADING_RE = /^( {0,3}###[ \t]+\[(\d{4}-\d{2}-\d{2})\][ \t]+GOTCHA-(\d+):)(.*)$/;
-var TAG_RE = /^ (\[解決済み\]|\[対象外\])(?:[ \t](.*))?$/;
-var FIELD_LINE_RE = /^ {0,3}\*\*(.+?)\*\*[ \t]*:[ \t]*(.*)$/;
-function parseTagAndTitle(rest) {
-  const m = TAG_RE.exec(rest);
-  if (m === null) return { tag: null, title: rest.trim() };
-  const literal = m[1];
-  const tag = literal === "[\u89E3\u6C7A\u6E08\u307F]" ? "\u89E3\u6C7A\u6E08\u307F" : "\u5BFE\u8C61\u5916";
-  return { tag, title: (m[2] ?? "").trim() };
-}
-function normalizeFieldName(name) {
-  return name.replace(/[\s　]/g, "");
-}
-var FIELD_KEYS = {
-  \u30BF\u30B9\u30AF: "task",
-  \u5931\u6557\u5185\u5BB9: "mistake",
-  "\u539F\u56E0(\u63A8\u6E2C)": "cause",
-  \u5BFE\u7B56: "countermeasure",
-  \u6607\u683C\u5019\u88DC: "promotionCandidate"
-};
-function parseEntryFields(bodyLines) {
-  const fields = {};
-  const values = {
-    task: "",
-    mistake: "",
-    cause: "",
-    countermeasure: "",
-    promotionCandidate: null
-  };
-  for (const raw of bodyLines) {
-    const m = FIELD_LINE_RE.exec(stripCr(raw));
-    if (m === null) continue;
-    const name = m[1].trim();
-    const value = m[2].trim();
-    if (fields[name] === void 0) fields[name] = value;
-    const key = FIELD_KEYS[normalizeFieldName(name)];
-    if (key === void 0) continue;
-    if (key === "promotionCandidate") {
-      if (values.promotionCandidate === null && (value === "Yes" || value === "No")) {
-        values.promotionCandidate = value;
-      }
-      continue;
-    }
-    if (values[key] === "") values[key] = value;
-  }
-  return { fields, values };
-}
-function parseWith(text, ignoreFences) {
-  const lines = text.split("\n");
-  const { blocked, unclosedFence } = scanFences2(lines, ignoreFences);
-  const warnings = [];
-  let listSection = null;
-  for (let i = 0; i < lines.length; i++) {
-    if (blocked[i]) continue;
-    const m = SECTION_HEADING_RE.exec(stripCr(lines[i]));
-    if (m === null) continue;
-    if (listSection === null && m[1].trim() === LIST_SECTION_TITLE) {
-      listSection = { headingIndex: i, endIndex: lines.length };
-      continue;
-    }
-    if (listSection !== null && listSection.endIndex === lines.length) {
-      listSection.endIndex = i;
-      break;
-    }
-  }
-  const entries = [];
-  if (listSection !== null) {
-    const starts = [];
-    for (let i = listSection.headingIndex + 1; i < listSection.endIndex; i++) {
-      if (blocked[i]) continue;
-      if (!SUB_HEADING_RE.test(stripCr(lines[i]))) continue;
-      starts.push(i);
-    }
-    for (let s = 0; s < starts.length; s++) {
-      const startIndex = starts[s];
-      const endIndex = s + 1 < starts.length ? starts[s + 1] : listSection.endIndex;
-      const headingLine = lines[startIndex];
-      const m = ENTRY_HEADING_RE.exec(stripCr(headingLine));
-      if (m === null) continue;
-      const bodyLines = lines.slice(startIndex + 1, endIndex);
-      const { fields, values } = parseEntryFields(bodyLines);
-      const { tag, title } = parseTagAndTitle(m[4]);
-      const num = Number.parseInt(m[3], 10);
-      entries.push({
-        ...values,
-        id: formatGotchaId(num),
-        number: num,
-        date: m[2],
-        tag,
-        title,
-        headingLine,
-        startIndex,
-        endIndex,
-        raw: lines.slice(startIndex, endIndex).join("\n"),
-        fields
-      });
-    }
-  }
-  let maxNumber = 0;
-  for (const entry of entries) {
-    if (entry.number > maxNumber) maxNumber = entry.number;
-  }
-  if (unclosedFence) {
-    warnings.push(
-      "\u672A\u9589\u306E\u30B3\u30FC\u30C9\u30D5\u30A7\u30F3\u30B9\u304C\u3042\u308A\u307E\u3059\u3002\u30A8\u30F3\u30C8\u30EA\u306E\u7BC4\u56F2\u304C\u6B63\u3057\u304F\u53D6\u308C\u3066\u3044\u306A\u3044\u53EF\u80FD\u6027\u304C\u3042\u308A\u307E\u3059\u3002"
-    );
-  }
-  return {
-    text,
-    lines,
-    crlf: text.includes("\r\n"),
-    listSection,
-    entries,
-    maxNumber,
-    nextNumber: maxNumber + 1,
-    unclosedFence,
-    warnings
-  };
-}
-function parseGotchas(text) {
-  const primary = parseWith(text, false);
-  if (!primary.unclosedFence) return primary;
-  const fallback = parseWith(text, true);
-  const useFallback = primary.listSection === null && fallback.listSection !== null;
-  const base = useFallback ? fallback : primary;
-  const maxNumber = Math.max(primary.maxNumber, fallback.maxNumber);
-  const warnings = [...primary.warnings];
-  if (useFallback) {
-    warnings.push(
-      "\u672A\u9589\u30D5\u30A7\u30F3\u30B9\u306E\u305F\u3081\u3001\u30D5\u30A7\u30F3\u30B9\u3092\u7121\u8996\u3057\u305F\u8D70\u67FB\u3067 `## \u5931\u6557\u30D1\u30BF\u30FC\u30F3\u4E00\u89A7` \u3092\u7279\u5B9A\u3057\u307E\u3057\u305F\u3002"
-    );
-  }
-  return {
-    ...base,
-    maxNumber,
-    nextNumber: maxNumber + 1,
-    unclosedFence: true,
-    warnings
-  };
-}
-function formatGotchaId(num) {
-  return `GOTCHA-${String(num).padStart(3, "0")}`;
-}
-function parseGotchaId(raw) {
-  const m = /^(?:GOTCHA-)?(\d+)$/i.exec(raw.trim());
-  if (m === null) return null;
-  const num = Number.parseInt(m[1], 10);
-  return Number.isFinite(num) ? num : null;
-}
-function findGotchaByNumber(doc, num) {
-  return doc.entries.find((entry) => entry.number === num) ?? null;
-}
-function filterGotchas(entries, filter = {}) {
-  let result = entries;
-  if (filter.id !== void 0) {
-    const num = parseGotchaId(filter.id);
-    result = num === null ? [] : result.filter((e) => e.number === num);
-  }
-  if (filter.query !== void 0 && filter.query !== "") {
-    const needle = filter.query.toLowerCase();
-    result = result.filter((e) => e.raw.toLowerCase().includes(needle));
-  }
-  if (filter.excludeTagged === true) {
-    result = result.filter((e) => e.tag === null);
-  }
-  if (filter.promotionCandidates === true) {
-    result = result.filter((e) => e.promotionCandidate === "Yes");
-  }
-  if (filter.recent !== void 0 && filter.recent >= 0) {
-    result = result.slice(0, filter.recent);
-  }
-  return result;
-}
-var DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-var PLATITUDES = /* @__PURE__ */ new Set([
-  "\u6C17\u3092\u3064\u3051\u308B",
-  "\u6C17\u3092\u4ED8\u3051\u308B",
-  "\u6C17\u3092\u3064\u3051\u305F\u3044",
-  "\u6C17\u3092\u3064\u3051\u308B\u3053\u3068",
-  "\u6C17\u3092\u4ED8\u3051\u308B\u3053\u3068",
-  "\u6CE8\u610F",
-  "\u6CE8\u610F\u3059\u308B",
-  "\u6CE8\u610F\u3057\u305F\u3044",
-  "\u6CE8\u610F\u3059\u308B\u3053\u3068"
-]);
-function normalizeForPlatitude(value) {
-  return value.replace(/[\s　]/g, "").replace(/[。.、,!！]+$/, "");
-}
-function requireSingleLine(value, label, errors) {
-  if (typeof value !== "string") {
-    errors.push(`${label} \u304C\u6587\u5B57\u5217\u3067\u306F\u3042\u308A\u307E\u305B\u3093\u3002`);
-    return "";
-  }
-  if (value.includes("\n") || value.includes("\r")) {
-    errors.push(
-      `${label} \u306B\u6539\u884C\u304C\u542B\u307E\u308C\u3066\u3044\u307E\u3059\u30021 \u884C\u3067\u66F8\u3051\u308B\u5185\u5BB9\u306B\u8981\u7D04\u3057\u3066\u304F\u3060\u3055\u3044\u3002`
-    );
-    return "";
-  }
-  return value;
-}
-function validateGotchaInput(input) {
-  const errors = [];
-  const warnings = [];
-  const title = requireSingleLine(input.title, "title", errors);
-  if (title.trim() === "") errors.push("title \u304C\u7A7A\u3067\u3059\u3002");
-  if (input.date !== void 0) {
-    if (typeof input.date !== "string" || !DATE_RE.test(input.date)) {
-      errors.push("date \u306F YYYY-MM-DD \u306E\u5F62\u5F0F\u3067\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044\u3002");
-    }
-  }
-  const task = requireSingleLine(input.task, "task", errors);
-  const mistake = requireSingleLine(input.mistake, "mistake", errors);
-  const cause = requireSingleLine(input.cause, "cause", errors);
-  const countermeasure = requireSingleLine(
-    input.countermeasure,
-    "countermeasure",
-    errors
-  );
-  if (input.promotionCandidate !== "Yes" && input.promotionCandidate !== "No") {
-    errors.push(
-      `promotionCandidate \u306F "Yes" \u307E\u305F\u306F "No" \u306E\u307F\u3092\u53D7\u3051\u4ED8\u3051\u307E\u3059(\u53D7\u9818: ${JSON.stringify(
-        input.promotionCandidate
-      )})\u3002`
-    );
-  }
-  for (const [label, value] of [
-    ["task", task],
-    ["mistake", mistake],
-    ["cause", cause]
-  ]) {
-    if (value.trim() === "") warnings.push(`${label} \u304C\u7A7A\u3067\u3059\u3002`);
-  }
-  const normalized = normalizeForPlatitude(countermeasure);
-  if (normalized === "") {
-    warnings.push(
-      "countermeasure \u304C\u7A7A\u3067\u3059\u3002\u6B21\u306E\u30A8\u30FC\u30B8\u30A7\u30F3\u30C8\u304C\u305D\u306E\u307E\u307E\u5B9F\u884C\u3067\u304D\u308B\u884C\u52D5\u306B\u843D\u3068\u3057\u3066\u304F\u3060\u3055\u3044\u3002"
-    );
-  } else if (PLATITUDES.has(normalized)) {
-    warnings.push(
-      "countermeasure \u304C\u7CBE\u795E\u8AD6\u306E\u307F\u3067\u3059\u3002\u300C\u301C\u3059\u308B\u524D\u306B\u301C\u3092 Read \u3057\u3066\u78BA\u8A8D\u3059\u308B\u300D\u306E\u5F62\u306B\u66F8\u304D\u63DB\u3048\u3066\u304F\u3060\u3055\u3044\u3002"
-    );
-  }
-  return { errors, warnings };
-}
-var TEMPLATE_LINES = [
-  "# GOTCHAS",
-  "",
-  "\u3053\u306E\u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u3067 AI \u304C\u5B9F\u969B\u306B\u3084\u3063\u3066\u3057\u307E\u3063\u305F\u5931\u6557\u306E\u30D1\u30BF\u30FC\u30F3\u3092\u84C4\u7A4D\u3059\u308B\u3002",
-  "\u767A\u898B\u3055\u308C\u305F\u5931\u6557\u3092\u3001\u4E0B\u8A18\u306E\u30D5\u30A9\u30FC\u30DE\u30C3\u30C8\u3067\u8FFD\u8A18\u3057\u3066\u3044\u304F\u3002",
-  "",
-  "## \u904B\u7528\u30EB\u30FC\u30EB",
-  "",
-  "- \u65B0\u3057\u3044\u3082\u306E\u3092\u4E0A\u306B\u8FFD\u52A0\u3059\u308B\u3002",
-  "- \u540C\u3058\u30D1\u30BF\u30FC\u30F3\u304C 5 \u4EF6\u4EE5\u4E0A\u84C4\u7A4D\u3055\u308C\u305F\u3089\u3001\u30B9\u30AD\u30EB\u307E\u305F\u306F Hook \u3078\u306E\u6607\u683C\u3092\u691C\u8A0E\u3059\u308B\u3002",
-  "- \u89E3\u6C7A\u6E08\u307F\u306E\u9805\u76EE\u306F `[\u89E3\u6C7A\u6E08\u307F]` \u30BF\u30B0\u3092\u4ED8\u3051\u3066\u6B8B\u3059\u3002\u524A\u9664\u3057\u306A\u3044\u3002",
-  "- \u9673\u8150\u5316\u3057\u305F\u9805\u76EE\u306F `[\u5BFE\u8C61\u5916]` \u30BF\u30B0\u3092\u4ED8\u3051\u3066\u6B8B\u3059\u3002\u524A\u9664\u3057\u306A\u3044\u3002",
-  "",
-  "## \u8A18\u5165\u30C6\u30F3\u30D7\u30EC\u30FC\u30C8",
-  "",
-  "### [YYYY-MM-DD] GOTCHA-NNN: \u5931\u6557\u306E\u30BF\u30A4\u30C8\u30EB",
-  "",
-  "**\u30BF\u30B9\u30AF**: (\u4F55\u3092\u3057\u3088\u3046\u3068\u3057\u3066\u3044\u305F\u304B)",
-  "**\u5931\u6557\u5185\u5BB9**: (\u5177\u4F53\u7684\u306B\u4F55\u3092\u9593\u9055\u3048\u305F\u304B)",
-  "**\u539F\u56E0 (\u63A8\u6E2C)**: (\u306A\u305C\u305D\u3046\u306A\u3063\u305F\u304B)",
-  "**\u5BFE\u7B56**: (\u4ECA\u5F8C AI \u306F\u3069\u3046\u632F\u308B\u821E\u3046\u3079\u304D\u304B)",
-  "**\u6607\u683C\u5019\u88DC**: Yes / No (\u30B9\u30AD\u30EB\u3084 Hook \u306B\u3059\u308B\u3079\u304D\u304B)",
-  "",
-  `## ${LIST_SECTION_TITLE}`,
-  ""
-];
-function renderGotchasTemplate() {
-  return TEMPLATE_LINES.join("\n");
-}
-function renderEntryLines(num, date, input) {
-  return [
-    `### [${date}] ${formatGotchaId(num)}: ${input.title.trim()}`,
-    "",
-    `**\u30BF\u30B9\u30AF**: ${input.task.trim()}`,
-    `**\u5931\u6557\u5185\u5BB9**: ${input.mistake.trim()}`,
-    `**\u539F\u56E0 (\u63A8\u6E2C)**: ${input.cause.trim()}`,
-    `**\u5BFE\u7B56**: ${input.countermeasure.trim()}`,
-    `**\u6607\u683C\u5019\u88DC**: ${input.promotionCandidate}`
-  ];
-}
-function applyEol(lines, crlf) {
-  return crlf ? lines.map((line) => `${line}\r`) : lines;
-}
-function isBlank(line) {
-  return stripCr(line).trim() === "";
-}
-function buildAppendedText(existing, input, date) {
-  const warnings = [];
-  let created = false;
-  let sectionCreated = false;
-  let source = existing;
-  if (source === null || source.trim() === "") {
-    source = renderGotchasTemplate();
-    created = true;
-  }
-  let doc = parseGotchas(source);
-  warnings.push(...doc.warnings);
-  if (doc.listSection === null) {
-    const lines2 = [...doc.lines];
-    while (lines2.length > 0 && isBlank(lines2[lines2.length - 1])) lines2.pop();
-    lines2.push(...applyEol(["", `## ${LIST_SECTION_TITLE}`, ""], doc.crlf));
-    doc = parseGotchas(lines2.join("\n"));
-    sectionCreated = !created;
-  }
-  const section = doc.listSection;
-  if (section === null) {
-    throw new GotchaError(
-      "invalid_input",
-      `\`## ${LIST_SECTION_TITLE}\` \u7BC0\u3092\u4F5C\u6210\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F\u3002`
-    );
-  }
-  const num = doc.nextNumber;
-  const insertAt = section.headingIndex + 1;
-  const block = ["", ...renderEntryLines(num, date, input)];
-  const following = doc.lines[insertAt];
-  if (following === void 0 || !isBlank(following)) {
-    block.push("");
-  }
-  const lines = [...doc.lines];
-  lines.splice(insertAt, 0, ...applyEol(block, doc.crlf));
-  const text = lines.join("\n");
-  const id = formatGotchaId(num);
-  const added = parseGotchas(text).entries.find((e) => e.id === id);
-  if (added === void 0 || added.tag !== null) {
-    throw new GotchaError(
-      "invalid_input",
-      `title\u300C${input.title.trim()}\u300D\u306F\u898B\u51FA\u3057\u306E\u30BF\u30B0(${GOTCHA_TAGS.map((t) => `[${t}]`).join(" / ")})\u3068\u3057\u3066\u8AAD\u307E\u308C\u307E\u3059\u3002\u30BF\u30B0\u306F tag-gotcha \u3067\u4ED8\u3051\u3066\u304F\u3060\u3055\u3044\u3002`
-    );
-  }
-  if (added.title !== input.title.trim()) {
-    throw new GotchaError(
-      "invalid_input",
-      `\u8FFD\u8A18\u3057\u305F\u898B\u51FA\u3057\u306E\u30BF\u30A4\u30C8\u30EB\u304C\u5165\u529B\u3068\u4E00\u81F4\u3057\u307E\u305B\u3093(\u8AAD\u307F\u76F4\u3057: ${JSON.stringify(added.title)})\u3002`
-    );
-  }
-  return {
-    text,
-    id,
-    number: num,
-    created,
-    sectionCreated,
-    warnings
-  };
-}
-function buildTaggedText(existing, num, tag, reason, date) {
-  const doc = parseGotchas(existing);
-  const entry = findGotchaByNumber(doc, num);
-  if (entry === null) {
-    throw new GotchaError(
-      "not_found",
-      `${formatGotchaId(num)} \u304C \`## ${LIST_SECTION_TITLE}\` \u914D\u4E0B\u306B\u898B\u3064\u304B\u308A\u307E\u305B\u3093\u3002`
-    );
-  }
-  const lines = [...doc.lines];
-  const rawHeading = lines[entry.startIndex];
-  const hadCr = rawHeading.endsWith("\r");
-  const m = ENTRY_HEADING_RE.exec(stripCr(rawHeading));
-  if (m === null) {
-    throw new GotchaError(
-      "not_found",
-      `${formatGotchaId(num)} \u306E\u898B\u51FA\u3057\u3092\u89E3\u6790\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F\u3002`
-    );
-  }
-  const title = entry.title;
-  const rebuilt = `${m[1]} [${tag}]${title === "" ? "" : ` ${title}`}`;
-  lines[entry.startIndex] = hadCr ? `${rebuilt}\r` : rebuilt;
-  let last = entry.startIndex;
-  for (let i = entry.endIndex - 1; i > entry.startIndex; i--) {
-    if (!isBlank(lines[i])) {
-      last = i;
-      break;
-    }
-  }
-  const reasonLine = `**[${tag}] (${date})**: ${reason.trim()}`;
-  lines.splice(last + 1, 0, ...applyEol([reasonLine], doc.crlf));
-  return {
-    text: lines.join("\n"),
-    id: entry.id,
-    previousTag: entry.tag,
-    tag,
-    warnings: doc.warnings
-  };
-}
-var REWRITE_KEYS = [
-  "title",
-  "task",
-  "mistake",
-  "cause",
-  "countermeasure",
-  "promotionCandidate"
-];
-function locateFieldLines(lines, entry) {
-  const found = {};
-  const { blocked } = scanFences2(lines, false);
-  for (let i = entry.startIndex + 1; i < entry.endIndex; i++) {
-    if (blocked[i]) continue;
-    const m = FIELD_LINE_RE.exec(stripCr(lines[i]));
-    if (m === null) continue;
-    const key = FIELD_KEYS[normalizeFieldName(m[1].trim())];
-    if (key === void 0) continue;
-    const value = m[2].trim();
-    const usable = key === "promotionCandidate" ? value === "Yes" || value === "No" : value !== "";
-    const current = found[key];
-    if (current === void 0) found[key] = { index: i, settled: usable };
-    else if (!current.settled && usable)
-      found[key] = { index: i, settled: true };
-  }
-  const out = {};
-  for (const [key, hit] of Object.entries(found)) {
-    out[key] = hit.index;
-  }
-  return out;
-}
-function replaceFieldValue(line, value) {
-  const bare = stripCr(line);
-  const m = FIELD_LINE_RE.exec(bare);
-  let head = bare.slice(0, bare.length - m[2].length);
-  if (head.endsWith(":")) head += " ";
-  return `${head}${value}${line.endsWith("\r") ? "\r" : ""}`;
-}
-var MEANINGFUL_RE = /[\p{L}\p{N}]/u;
-var LOOSE_HEADING_RE = /^\s{0,3}#{1,6}\s*\[\d{4}-\d{2}-\d{2}\]\s*GOTCHA-\d+/;
-function rewriteRejected(message, details = []) {
-  throw new GotchaError("invalid_input", message, details);
-}
-function buildRewrittenText(existing, rawInput) {
-  const input = normalizeInputNewlines(rawInput);
-  const errors = [];
-  for (const key of [...REWRITE_KEYS, "reason"]) {
-    if (input[key] !== void 0 && typeof input[key] !== "string") {
-      errors.push(`${key} \u304C\u6587\u5B57\u5217\u3067\u306F\u3042\u308A\u307E\u305B\u3093\u3002`);
-    }
-  }
-  if (typeof input.id !== "string") errors.push("id \u304C\u6587\u5B57\u5217\u3067\u306F\u3042\u308A\u307E\u305B\u3093\u3002");
-  if (errors.length > 0) {
-    rewriteRejected(
-      `\u5165\u529B\u304C\u66F8\u5F0F\u3092\u6E80\u305F\u3057\u3066\u3044\u307E\u305B\u3093: ${errors.join(" / ")}`,
-      errors
-    );
-  }
-  for (const key of REWRITE_KEYS) {
-    const value = input[key];
-    if (value === void 0 || key === "promotionCandidate") continue;
-    if (!MEANINGFUL_RE.test(value)) {
-      errors.push(
-        `${key} \u306B\u6587\u5B57\u307E\u305F\u306F\u6570\u5B57\u304C\u3042\u308A\u307E\u305B\u3093\u3002\u7A7A\u3084\u610F\u5473\u306E\u7121\u3044\u5024\u3078\u306E\u66F8\u304D\u63DB\u3048\u306F\u53D7\u3051\u4ED8\u3051\u307E\u305B\u3093\u3002`
-      );
-    }
-  }
-  if (errors.length > 0) {
-    rewriteRejected(
-      `\u5165\u529B\u304C\u66F8\u5F0F\u3092\u6E80\u305F\u3057\u3066\u3044\u307E\u305B\u3093: ${errors.join(" / ")}`,
-      errors
-    );
-  }
-  const num = parseGotchaId(input.id);
-  if (num === null) {
-    rewriteRejected(
-      `id \u306F GOTCHA-NNN \u306E\u5F62\u5F0F\u3067\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044(\u53D7\u9818: ${JSON.stringify(input.id)})\u3002`
-    );
-  }
-  const doc = parseGotchas(existing);
-  if (doc.unclosedFence) {
-    rewriteRejected(
-      "\u53F0\u5E33\u306B\u9589\u3058\u3066\u3044\u306A\u3044\u30B3\u30FC\u30C9\u30D5\u30A7\u30F3\u30B9\u304C\u3042\u308B\u305F\u3081\u3001\u30A8\u30F3\u30C8\u30EA\u306E\u7BC4\u56F2\u3092\u78BA\u5B9A\u3067\u304D\u305A\u66F8\u304D\u63DB\u3048\u3089\u308C\u307E\u305B\u3093\u3002\u30D5\u30A7\u30F3\u30B9\u3092\u9589\u3058\u3066\u304B\u3089\u5B9F\u884C\u3057\u3066\u304F\u3060\u3055\u3044\u3002"
-    );
-  }
-  if (doc.listSection !== null) {
-    let headingLike = 0;
-    for (let i = doc.listSection.headingIndex + 1; i < doc.listSection.endIndex; i++) {
-      if (LOOSE_HEADING_RE.test(stripCr(doc.lines[i]))) headingLike++;
-    }
-    if (headingLike !== doc.entries.length) {
-      rewriteRejected(
-        `\u53F0\u5E33\u306E\u69CB\u9020\u304C\u5D29\u308C\u3066\u3044\u307E\u3059(\u30A8\u30F3\u30C8\u30EA\u306E\u898B\u51FA\u3057\u306B\u898B\u3048\u308B\u884C\u304C ${headingLike} \u500B\u3001\u89E3\u6790\u3067\u304D\u305F\u30A8\u30F3\u30C8\u30EA\u304C ${doc.entries.length} \u500B)\u3002\u5D29\u308C\u305F\u898B\u51FA\u3057\u307E\u305F\u306F\u30B3\u30FC\u30C9\u30D5\u30A7\u30F3\u30B9\u3092\u76F4\u3057\u3066\u304B\u3089\u5B9F\u884C\u3057\u3066\u304F\u3060\u3055\u3044\u3002`
-      );
-    }
-  }
-  const entry = findGotchaByNumber(doc, num);
-  if (entry === null) {
-    throw new GotchaError(
-      "not_found",
-      `${formatGotchaId(num)} \u304C \`## ${LIST_SECTION_TITLE}\` \u914D\u4E0B\u306B\u898B\u3064\u304B\u308A\u307E\u305B\u3093\u3002`
-    );
-  }
-  const current = {
-    title: entry.title,
-    task: entry.task,
-    mistake: entry.mistake,
-    cause: entry.cause,
-    countermeasure: entry.countermeasure,
-    promotionCandidate: entry.promotionCandidate ?? ""
-  };
-  const next = { ...current };
-  for (const key of REWRITE_KEYS) {
-    const value = input[key];
-    if (value === void 0) continue;
-    next[key] = key === "promotionCandidate" ? value : value.trim();
-  }
-  const validation = validateGotchaInput(next);
-  if (validation.errors.length > 0) {
-    rewriteRejected(
-      `\u5165\u529B\u304C\u66F8\u5F0F\u3092\u6E80\u305F\u3057\u3066\u3044\u307E\u305B\u3093: ${validation.errors.join(" / ")}`,
-      validation.errors
-    );
-  }
-  if (input.title !== void 0 && GOTCHA_TAGS.some((tag) => next.title.startsWith(`[${tag}]`))) {
-    rewriteRejected(
-      `title\u300C${next.title}\u300D\u306F\u30BF\u30B0(${GOTCHA_TAGS.map((t) => `[${t}]`).join(" / ")})\u3067\u59CB\u3081\u3089\u308C\u307E\u305B\u3093\u3002\u30BF\u30B0\u306F tag-gotcha \u3067\u4ED8\u3051\u3066\u304F\u3060\u3055\u3044\u3002`
-    );
-  }
-  const changed = REWRITE_KEYS.filter((key) => next[key] !== current[key]);
-  if (changed.length === 0) {
-    rewriteRejected(
-      `${entry.id} \u306F\u73FE\u884C\u306E\u5024\u3068\u540C\u3058\u3067\u3001\u66F8\u304D\u63DB\u3048\u308B\u9805\u76EE\u304C\u3042\u308A\u307E\u305B\u3093\u3002`
-    );
-  }
-  const lines = [...doc.lines];
-  if (changed.includes("title")) {
-    const m = ENTRY_HEADING_RE.exec(stripCr(lines[entry.startIndex]));
-    if (m === null) {
-      rewriteRejected(`${entry.id} \u306E\u898B\u51FA\u3057\u3092\u89E3\u6790\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F\u3002`);
-    }
-    const tagPart = entry.tag === null ? "" : ` [${entry.tag}]`;
-    const rebuilt = `${m[1]}${tagPart} ${next.title}`;
-    lines[entry.startIndex] = lines[entry.startIndex].endsWith("\r") ? `${rebuilt}\r` : rebuilt;
-  }
-  const fieldLines = locateFieldLines(doc.lines, entry);
-  for (const key of changed) {
-    if (key === "title") continue;
-    const index = fieldLines[key];
-    if (index === void 0) {
-      rewriteRejected(
-        `${entry.id} \u306B ${key} \u306E\u30D5\u30A3\u30FC\u30EB\u30C9\u884C\u304C\u7121\u3044\u305F\u3081\u66F8\u304D\u63DB\u3048\u3089\u308C\u307E\u305B\u3093\u3002`
-      );
-    }
-    lines[index] = replaceFieldValue(lines[index], next[key]);
-  }
-  const text = lines.join("\n");
-  const after = parseGotchas(text);
-  const problems = [];
-  const entryIndex = doc.entries.indexOf(entry);
-  if (after.entries.length !== doc.entries.length) {
-    problems.push(
-      `\u30A8\u30F3\u30C8\u30EA\u6570\u304C\u5909\u308F\u308A\u307E\u3057\u305F(${doc.entries.length} \u2192 ${after.entries.length})\u3002`
-    );
-  } else {
-    doc.entries.forEach((before, i) => {
-      const reread = after.entries[i];
-      if (i !== entryIndex) {
-        if (reread.raw !== before.raw) {
-          problems.push(`${before.id} \u304C\u5909\u308F\u308A\u307E\u3057\u305F\u3002`);
-        }
-        return;
-      }
-      if (reread.id !== before.id || reread.date !== before.date) {
-        problems.push(`${before.id} \u306E\u898B\u51FA\u3057\u306E ID \u307E\u305F\u306F\u65E5\u4ED8\u304C\u5909\u308F\u308A\u307E\u3057\u305F\u3002`);
-      }
-      if (reread.tag !== before.tag) {
-        problems.push(`${before.id} \u306E\u898B\u51FA\u3057\u306E\u30BF\u30B0\u304C\u5909\u308F\u308A\u307E\u3057\u305F\u3002`);
-      }
-      for (const key of REWRITE_KEYS) {
-        const got = key === "promotionCandidate" ? reread[key] ?? "" : reread[key];
-        if (got !== next[key]) {
-          problems.push(
-            `${key} \u304C\u5165\u529B\u3068\u4E00\u81F4\u3057\u307E\u305B\u3093(\u8AAD\u307F\u76F4\u3057: ${JSON.stringify(got)})\u3002`
-          );
-        }
-      }
-    });
-  }
-  if (lines.length !== doc.lines.length) {
-    problems.push("\u884C\u6570\u304C\u5909\u308F\u308A\u307E\u3057\u305F\u3002");
-  }
-  for (let i = 0; i < doc.lines.length; i++) {
-    if (i >= entry.startIndex && i < entry.endIndex) continue;
-    if (lines[i] !== doc.lines[i]) {
-      problems.push(`\u30A8\u30F3\u30C8\u30EA\u306E\u7BC4\u56F2\u306E\u5916(${i + 1} \u884C\u76EE)\u304C\u5909\u308F\u308A\u307E\u3057\u305F\u3002`);
-      break;
-    }
-  }
-  if (problems.length > 0) {
-    rewriteRejected(
-      `\u66F8\u304D\u63DB\u3048\u305F\u5168\u6587\u3092\u8AAD\u307F\u76F4\u3057\u305F\u7D50\u679C\u304C\u5165\u529B\u3068\u4E00\u81F4\u3057\u307E\u305B\u3093: ${problems.join(" / ")}`,
-      problems
-    );
-  }
-  return {
-    text,
-    id: entry.id,
-    changed,
-    warnings: [...doc.warnings, ...validation.warnings]
-  };
-}
-var LOCK_RETRY_INTERVAL_MS = 50;
-var LOCK_MAX_RETRIES = 20;
-var LOCK_STALE_MS = 6e4;
-function lockPathFor(targetPath) {
-  return `${targetPath}.lock`;
-}
-function sleepSync(ms) {
-  const shared = new Int32Array(new SharedArrayBuffer(4));
-  Atomics.wait(shared, 0, 0, ms);
-}
-function errnoCode2(error) {
-  return error?.code;
-}
-function tryCreateLock(lockPath) {
-  try {
-    const fd = fs2.openSync(lockPath, "wx");
-    try {
-      fs2.writeSync(fd, `${process.pid} ${(/* @__PURE__ */ new Date()).toISOString()}
-`);
-    } finally {
-      fs2.closeSync(fd);
-    }
-    return true;
-  } catch (error) {
-    if (errnoCode2(error) === "EEXIST") return false;
-    throw error;
-  }
-}
-function statMtimeMs(lockPath) {
-  try {
-    return fs2.statSync(lockPath).mtimeMs;
-  } catch {
-    return null;
-  }
-}
-function tryStealStaleLock(lockPath) {
-  const mtimeMs = statMtimeMs(lockPath);
-  if (mtimeMs === null) return tryCreateLock(lockPath);
-  if (Date.now() - mtimeMs <= LOCK_STALE_MS) return false;
-  try {
-    fs2.unlinkSync(lockPath);
-  } catch (error) {
-    if (errnoCode2(error) !== "ENOENT") return false;
-  }
-  return tryCreateLock(lockPath);
-}
-function withFileLock(targetPath, fn) {
-  const lockPath = lockPathFor(targetPath);
-  try {
-    fs2.mkdirSync(path2.dirname(lockPath), { recursive: true });
-  } catch {
-  }
-  let acquired = tryCreateLock(lockPath);
-  for (let attempt = 0; !acquired && attempt < LOCK_MAX_RETRIES; attempt++) {
-    const mtimeMs = statMtimeMs(lockPath);
-    if (mtimeMs !== null && Date.now() - mtimeMs > LOCK_STALE_MS) {
-      acquired = tryStealStaleLock(lockPath);
-      if (acquired) break;
-    }
-    sleepSync(LOCK_RETRY_INTERVAL_MS);
-    acquired = tryCreateLock(lockPath);
-  }
-  if (!acquired) {
-    throw new GotchaError(
-      "lock_timeout",
-      `${lockPath} \u306E\u30ED\u30C3\u30AF\u3092\u53D6\u5F97\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F\u3002\u4ED6\u306E\u30D7\u30ED\u30BB\u30B9\u304C\u66F8\u304D\u8FBC\u307F\u4E2D\u306E\u53EF\u80FD\u6027\u304C\u3042\u308A\u307E\u3059\u3002`
-    );
-  }
-  try {
-    return fn();
-  } finally {
-    try {
-      fs2.rmSync(lockPath, { force: true });
-    } catch {
-    }
-  }
-}
-function readTextIfExists(filePath) {
-  try {
-    return fs2.readFileSync(filePath, "utf8");
-  } catch (error) {
-    if (errnoCode2(error) === "ENOENT") return null;
-    throw error;
-  }
-}
-function formatToday(now) {
-  const y = String(now.getFullYear()).padStart(4, "0");
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  const d = String(now.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-function initGotchasLedger(gotchasPath) {
-  return withFileLock(gotchasPath, () => {
-    const existing = readTextIfExists(gotchasPath);
-    if (existing !== null && existing.trim() !== "") {
-      throw new GotchaError(
-        "already_exists",
-        `${gotchasPath} \u306F\u65E2\u306B\u5B58\u5728\u3057\u307E\u3059\u3002\u65E2\u5B58\u306E\u53F0\u5E33\u3092\u4E0A\u66F8\u304D\u3057\u307E\u305B\u3093\u3002\u30A8\u30F3\u30C8\u30EA\u306E\u8FFD\u8A18\u306F append-gotcha \u3092\u4F7F\u3063\u3066\u304F\u3060\u3055\u3044\u3002`
-      );
-    }
-    const text = renderGotchasTemplate();
-    writeFileAtomic(gotchasPath, text);
-    return {
-      path: gotchasPath,
-      created: true,
-      bytesWritten: Buffer.byteLength(text)
-    };
-  });
-}
-function appendGotcha(gotchasPath, rawInput, options = {}) {
-  const input = normalizeInputNewlines(rawInput);
-  const validation = validateGotchaInput(input);
-  if (validation.errors.length > 0) {
-    throw new GotchaError(
-      "invalid_input",
-      `\u5165\u529B\u304C\u66F8\u5F0F\u3092\u6E80\u305F\u3057\u3066\u3044\u307E\u305B\u3093: ${validation.errors.join(" / ")}`,
-      validation.errors
-    );
-  }
-  const date = input.date ?? formatToday(options.now ?? /* @__PURE__ */ new Date());
-  return withFileLock(gotchasPath, () => {
-    const existing = readTextIfExists(gotchasPath);
-    const built = buildAppendedText(existing, input, date);
-    writeFileAtomic(gotchasPath, built.text);
-    return {
-      id: built.id,
-      number: built.number,
-      path: gotchasPath,
-      date,
-      created: built.created,
-      sectionCreated: built.sectionCreated,
-      warnings: [...validation.warnings, ...built.warnings]
-    };
-  });
-}
-function isGotchaTag(value) {
-  return GOTCHA_TAGS.includes(value);
-}
-function tagGotcha(gotchasPath, params, options = {}) {
-  if (!isGotchaTag(params.tag)) {
-    throw new GotchaError(
-      "invalid_tag",
-      `--tag \u306F ${GOTCHA_TAGS.join(" / ")} \u306E\u307F\u3092\u53D7\u3051\u4ED8\u3051\u307E\u3059(\u53D7\u9818: ${JSON.stringify(
-        params.tag
-      )})\u3002`
-    );
-  }
-  const tag = params.tag;
-  const errors = [];
-  const reason = requireSingleLine(params.reason, "reason", errors);
-  if (reason.trim() === "") {
-    errors.push("reason \u304C\u7A7A\u3067\u3059\u3002\u30BF\u30B0\u3092\u4ED8\u3051\u308B\u7406\u7531\u306F\u5FC5\u9808\u3067\u3059\u3002");
-  }
-  if (params.date !== void 0 && !DATE_RE.test(params.date)) {
-    errors.push("date \u306F YYYY-MM-DD \u306E\u5F62\u5F0F\u3067\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044\u3002");
-  }
-  if (errors.length > 0) {
-    throw new GotchaError(
-      "invalid_input",
-      `\u5165\u529B\u304C\u66F8\u5F0F\u3092\u6E80\u305F\u3057\u3066\u3044\u307E\u305B\u3093: ${errors.join(" / ")}`,
-      errors
-    );
-  }
-  const num = parseGotchaId(params.id);
-  if (num === null) {
-    throw new GotchaError(
-      "invalid_input",
-      `--id \u306F GOTCHA-NNN \u306E\u5F62\u5F0F\u3067\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044(\u53D7\u9818: ${JSON.stringify(params.id)})\u3002`
-    );
-  }
-  const date = params.date ?? formatToday(options.now ?? /* @__PURE__ */ new Date());
-  return withFileLock(gotchasPath, () => {
-    const existing = readTextIfExists(gotchasPath);
-    if (existing === null) {
-      throw new GotchaError("not_found", `${gotchasPath} \u304C\u5B58\u5728\u3057\u307E\u305B\u3093\u3002`);
-    }
-    const built = buildTaggedText(existing, num, tag, reason, date);
-    writeFileAtomic(gotchasPath, built.text);
-    return {
-      id: built.id,
-      path: gotchasPath,
-      tag: built.tag,
-      previousTag: built.previousTag,
-      date,
-      warnings: built.warnings
-    };
-  });
-}
-
-// src/lib/adr.ts
-var ADR_STATUSES = ["\u63A1\u7528", "\u63D0\u6848", "\u5EC3\u6B62"];
-var DEFAULT_ADR_STATUS = "\u63A1\u7528";
-var AdrError = class extends Error {
-  code;
-  details;
-  constructor(code, message, details = []) {
-    super(message);
-    this.name = "AdrError";
-    this.code = code;
-    this.details = details;
-  }
-};
-var ENTRY_HEADING_RE2 = /^( {0,3}###[ \t]+ADR-(\d+):)(.*)$/;
-var STATUS_LINE_RE = /^( {0,3}-[ \t]+状態[ \t]*:[ \t]*)(.*)$/;
-var DECIDED_ON_RE = /^ {0,3}-[ \t]+決定日[ \t]*:[ \t]*(.*)$/;
-var DECIDED_BY_RE = /^ {0,3}-[ \t]+決定者[ \t]*:[ \t]*(.*)$/;
-var STATUS_CHANGE_RE = /^ {0,3}-[ \t]+状態変更\((\d{4}-\d{2}-\d{2})\)[ \t]*:[ \t]*(.*)$/;
-var ADR_SEPARATOR = "---";
-var ADR_SEPARATOR_BLOCK = `
-
-${ADR_SEPARATOR}
-
-`;
-var ADR_SEPARATOR_LINE_RE = /^ {0,3}-{3,}[ \t]*$/;
-function isTrailingFiller(text, insideFence) {
-  if (insideFence) return false;
-  return text.trim() === "" || ADR_SEPARATOR_LINE_RE.test(text);
-}
-var STATUS_CHANGE_VALUE_RE = /^(.*?)[ \t]*→[ \t]*([^。]*)。?(.*)$/;
-var DATE_RE2 = /^\d{4}-\d{2}-\d{2}$/;
-function formatAdrId(num) {
-  return `ADR-${String(num).padStart(3, "0")}`;
-}
-function parseAdrId(raw) {
-  if (typeof raw !== "string") return null;
-  const m = /^(?:ADR-)?(\d+)$/i.exec(raw.trim());
-  if (m === null) return null;
-  const num = Number.parseInt(m[1], 10);
-  return Number.isFinite(num) ? num : null;
-}
-function isAdrStatus(value) {
-  return typeof value === "string" && ADR_STATUSES.includes(value);
-}
-function joinRaw2(lines, start, end) {
-  let out = "";
-  for (let i = start; i < end; i++) out += lines[i].raw;
-  return out;
-}
-function parseStatusChangeValue(value) {
-  const m = STATUS_CHANGE_VALUE_RE.exec(value);
-  if (m === null) return { from: null, to: null, reason: value.trim() };
-  return { from: m[1].trim(), to: m[2].trim(), reason: m[3].trim() };
-}
-function parseEntries(sectionBody) {
-  const scan2 = scanFences(sectionBody);
-  const lines = scan2.lines;
-  const starts = [];
-  for (let i = 0; i < lines.length; i++) {
-    if (scan2.insideFence[i]) continue;
-    const m = ENTRY_HEADING_RE2.exec(lines[i].text);
-    if (m === null) continue;
-    starts.push({
-      index: i,
-      number: Number.parseInt(m[2], 10),
-      title: m[3].trim()
-    });
-  }
-  const entries = [];
-  for (let s = 0; s < starts.length; s++) {
-    const { index: startIndex, number, title } = starts[s];
-    const endIndex = s + 1 < starts.length ? starts[s + 1].index : lines.length;
-    let contentEndIndex = endIndex;
-    while (contentEndIndex > startIndex + 1 && isTrailingFiller(
-      lines[contentEndIndex - 1].text,
-      scan2.insideFence[contentEndIndex - 1]
-    )) {
-      contentEndIndex--;
-    }
-    let statusRaw = null;
-    let statusLineIndex = null;
-    let decidedOn = null;
-    let decidedBy = null;
-    const statusChanges = [];
-    for (let i = startIndex + 1; i < contentEndIndex; i++) {
-      if (scan2.insideFence[i]) continue;
-      const text = lines[i].text;
-      const change = STATUS_CHANGE_RE.exec(text);
-      if (change !== null) {
-        statusChanges.push({
-          date: change[1],
-          raw: change[2],
-          lineIndex: i,
-          ...parseStatusChangeValue(change[2])
-        });
-        continue;
-      }
-      if (statusRaw === null) {
-        const status = STATUS_LINE_RE.exec(text);
-        if (status !== null) {
-          statusRaw = status[2].trim();
-          statusLineIndex = i;
-          continue;
-        }
-      }
-      if (decidedOn === null) {
-        const on = DECIDED_ON_RE.exec(text);
-        if (on !== null) {
-          decidedOn = on[1].trim();
-          continue;
-        }
-      }
-      if (decidedBy === null) {
-        const by = DECIDED_BY_RE.exec(text);
-        if (by !== null) decidedBy = by[1].trim();
-      }
-    }
-    entries.push({
-      id: formatAdrId(number),
-      number,
-      title,
-      headingLine: lines[startIndex].text,
-      status: isAdrStatus(statusRaw) ? statusRaw : null,
-      statusRaw,
-      statusLineIndex,
-      decidedOn,
-      decidedBy,
-      startIndex,
-      contentEndIndex,
-      endIndex,
-      raw: joinRaw2(lines, startIndex, contentEndIndex),
-      statusChanges
-    });
-  }
-  return entries;
-}
-function normalizeAdrSeparators(body) {
-  const entries = parseEntries(body);
-  if (entries.length === 0) return body;
-  const scan2 = scanFences(body);
-  const textOf = (from, to) => scan2.lines.slice(from, to).map((line) => line.text).join("\n");
-  let prologueEnd = entries[0].startIndex;
-  while (prologueEnd > 0 && isTrailingFiller(
-    scan2.lines[prologueEnd - 1].text,
-    scan2.insideFence[prologueEnd - 1]
-  )) {
-    prologueEnd--;
-  }
-  const prologue = textOf(0, prologueEnd);
-  const blocks = entries.map(
-    (entry) => textOf(entry.startIndex, entry.contentEndIndex)
-  );
-  const joined = blocks.join(ADR_SEPARATOR_BLOCK);
-  return prologue === "" ? joined : `${prologue}
-
-${joined}`;
-}
-function parseAdrDocument(text) {
-  const source = text ?? "";
-  const doc = parseArchitecture(source);
-  const warnings = [...doc.warnings];
-  const section = findSection(doc, ADR_HEADING);
-  const sectionBody = section?.body ?? "";
-  const entries = section ? parseEntries(sectionBody) : [];
-  const seen = /* @__PURE__ */ new Map();
-  for (const entry of entries) {
-    seen.set(entry.number, (seen.get(entry.number) ?? 0) + 1);
-  }
-  for (const [num, count] of seen) {
-    if (count > 1) {
-      warnings.push(
-        `${formatAdrId(num)} \u304C ${count} \u500B\u3042\u308A\u307E\u3059\u3002\u63A1\u756A\u306F\u6700\u5927\u5024 + 1 \u3067\u884C\u3046\u305F\u3081\u885D\u7A81\u306F\u8D77\u304D\u307E\u305B\u3093\u304C\u3001\u624B\u7DE8\u96C6\u3067\u91CD\u8907\u3057\u305F\u3082\u306E\u3068\u601D\u308F\u308C\u307E\u3059\u3002`
-      );
-    }
-  }
-  let maxNumber = 0;
-  for (const entry of entries) {
-    if (entry.number > maxNumber) maxNumber = entry.number;
-  }
-  return {
-    text: source,
-    hasSection: section !== void 0,
-    sectionBody,
-    entries,
-    maxNumber,
-    nextNumber: maxNumber + 1,
-    unclosedFence: doc.error === "unclosed_fence",
-    warnings
-  };
-}
-function findAdrByNumber(doc, num) {
-  return doc.entries.find((entry) => entry.number === num) ?? null;
-}
-function filterAdrEntries(entries, filter = {}) {
-  let result = entries;
-  if (filter.id !== void 0) {
-    const num = parseAdrId(filter.id);
-    result = num === null ? [] : result.filter((e) => e.number === num);
-  }
-  if (filter.status !== void 0 && filter.status !== "") {
-    result = result.filter((e) => e.status === filter.status);
-  }
-  return result;
-}
-function requireSingleLine2(value, label, errors) {
-  if (typeof value !== "string") {
-    errors.push(`${label} \u304C\u6587\u5B57\u5217\u3067\u306F\u3042\u308A\u307E\u305B\u3093\u3002`);
-    return "";
-  }
-  if (value.includes("\n") || value.includes("\r")) {
-    errors.push(`${label} \u306B\u6539\u884C\u304C\u542B\u307E\u308C\u3066\u3044\u307E\u3059\u30021 \u884C\u3067\u66F8\u3044\u3066\u304F\u3060\u3055\u3044\u3002`);
-    return "";
-  }
-  if (value.trim() === "") {
-    errors.push(`${label} \u304C\u7A7A\u3067\u3059\u3002`);
-    return "";
-  }
-  return value;
-}
-function requireText(value, label, errors) {
-  if (typeof value !== "string") {
-    errors.push(`${label} \u304C\u6587\u5B57\u5217\u3067\u306F\u3042\u308A\u307E\u305B\u3093\u3002`);
-    return "";
-  }
-  if (value.trim() === "") {
-    errors.push(`${label} \u304C\u7A7A\u3067\u3059\u3002`);
-    return "";
-  }
-  return value;
-}
-var SUBHEADING_RE = /^ {0,3}####[ \t]/;
-var UNCLOSED_FIELD_SUFFIX = "\u306B\u9589\u3058\u3066\u3044\u306A\u3044\u30B3\u30FC\u30C9\u30D5\u30A7\u30F3\u30B9\u304C\u3042\u308A\u307E\u3059\u3002";
-function rejectStructuralLines(value, label, errors) {
-  if (typeof value !== "string") return;
-  const scan2 = scanFences(value);
-  if (scan2.unclosed) {
-    errors.push(`${label} ${UNCLOSED_FIELD_SUFFIX}`);
-    return;
-  }
-  for (let i = 0; i < scan2.lines.length; i++) {
-    if (scan2.insideFence[i]) continue;
-    const text = scan2.lines[i].text;
-    if (ENTRY_HEADING_RE2.test(text) || STATUS_LINE_RE.test(text) || SUBHEADING_RE.test(text)) {
-      errors.push(
-        `${label} \u306E ${i + 1} \u884C\u76EE\u300C${text.trim()}\u300D\u306F ADR \u306E\u898B\u51FA\u3057\u30FB\u72B6\u614B\u884C\u30FB\u5C0F\u898B\u51FA\u3057\u3068\u3057\u3066\u8AAD\u307E\u308C\u307E\u3059\u3002\u30B3\u30FC\u30C9\u30D5\u30A7\u30F3\u30B9\u306B\u5165\u308C\u308B\u304B\u66F8\u304D\u63DB\u3048\u3066\u304F\u3060\u3055\u3044\u3002`
-      );
-    }
-  }
-}
-function validateStatusValue(value, label, errors) {
-  if (!isAdrStatus(value)) {
-    errors.push(
-      `${label} \u306F ${ADR_STATUSES.join(" / ")} \u306E\u307F\u3092\u53D7\u3051\u4ED8\u3051\u307E\u3059(\u53D7\u9818: ${JSON.stringify(value)})\u3002`
-    );
-  }
-}
-function validateAdrAddInput(input) {
-  const errors = [];
-  const warnings = [];
-  requireSingleLine2(input?.title, "title", errors);
-  requireSingleLine2(input?.decidedBy, "decidedBy", errors);
-  requireText(input?.background, "background", errors);
-  requireText(input?.conclusion, "conclusion", errors);
-  requireText(input?.rationale, "rationale", errors);
-  requireText(input?.impact, "impact", errors);
-  for (const key of [
-    "background",
-    "conclusion",
-    "rationale",
-    "impact"
-  ]) {
-    rejectStructuralLines(input?.[key], key, errors);
-  }
-  if (input?.status !== void 0) {
-    validateStatusValue(input.status, "status", errors);
-  }
-  if (input?.decidedOn !== void 0) {
-    if (typeof input.decidedOn !== "string" || !DATE_RE2.test(input.decidedOn)) {
-      errors.push("decidedOn \u306F YYYY-MM-DD \u306E\u5F62\u5F0F\u3067\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044\u3002");
-    }
-  }
-  if (!Array.isArray(input?.options) || input.options.length === 0) {
-    errors.push(
-      "options \u304C 1 \u8981\u7D20\u4EE5\u4E0A\u306E\u914D\u5217\u3067\u306F\u3042\u308A\u307E\u305B\u3093\u3002\u6BD4\u8F03\u3057\u305F\u9078\u629E\u80A2\u3092\u6319\u3052\u3066\u304F\u3060\u3055\u3044\u3002"
-    );
-  } else {
-    input.options.forEach((option, i) => {
-      requireSingleLine2(option, `options[${i}]`, errors);
-    });
-    if (input.options.length === 1) {
-      warnings.push(
-        "options \u304C 1 \u4EF6\u3060\u3051\u3067\u3059\u3002\u6BD4\u8F03\u3057\u305F\u4EE3\u66FF\u3092\u6319\u3052\u3089\u308C\u306A\u3044\u3082\u306E\u306F\u5224\u65AD\u3067\u306F\u306A\u304F\u5236\u7D04\u3067\u3042\u308A\u3001`## \u6280\u8853\u30B9\u30BF\u30C3\u30AF` \u3084 `## \u898F\u7D04` \u306B\u5C5E\u3059\u308B\u53EF\u80FD\u6027\u304C\u3042\u308A\u307E\u3059(\u5951\u7D04 \xA76-3)\u3002"
-      );
-    }
-  }
-  return { errors, warnings };
-}
-function validateAdrStatusInput(input) {
-  const errors = [];
-  const warnings = [];
-  if (parseAdrId(input?.id) === null) {
-    errors.push(
-      `id \u306F ADR-NNN \u306E\u5F62\u5F0F\u3067\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044(\u53D7\u9818: ${JSON.stringify(input?.id)})\u3002`
-    );
-  }
-  validateStatusValue(input?.status, "status", errors);
-  if (input?.reason === void 0 || input?.reason === null) {
-    errors.push("reason \u304C\u6307\u5B9A\u3055\u308C\u3066\u3044\u307E\u305B\u3093\u3002\u72B6\u614B\u5909\u66F4\u306E\u7406\u7531\u306F\u5FC5\u9808\u3067\u3059\u3002");
-  } else {
-    const reasonErrors = [];
-    requireSingleLine2(input.reason, "reason", reasonErrors);
-    if (reasonErrors.length > 0) {
-      errors.push(...reasonErrors);
-      errors.push("\u72B6\u614B\u5909\u66F4\u306E\u7406\u7531\u306F\u5FC5\u9808\u3067\u3059\u3002");
-    } else {
-      rejectStructuralLines(input.reason, "reason", errors);
-    }
-  }
-  if (input?.changedOn !== void 0) {
-    if (typeof input.changedOn !== "string" || !DATE_RE2.test(input.changedOn)) {
-      errors.push("changedOn \u306F YYYY-MM-DD \u306E\u5F62\u5F0F\u3067\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044\u3002");
-    }
-  }
-  return { errors, warnings };
-}
-function throwOnErrors(result) {
-  if (result.errors.length === 0) return;
-  const status = result.errors.some((e) => e.startsWith("status \u306F"));
-  const unclosed = result.errors.some((e) => e.endsWith(UNCLOSED_FIELD_SUFFIX));
-  throw new AdrError(
-    status ? "invalid_status" : unclosed ? "unclosed_fence" : "invalid_input",
-    `\u5165\u529B\u304C\u66F8\u5F0F\u3092\u6E80\u305F\u3057\u3066\u3044\u307E\u305B\u3093: ${result.errors.join(" / ")}`,
-    result.errors
-  );
-}
-function renderAdrEntryLines(num, input, date, status) {
-  const lines = [
-    `### ${formatAdrId(num)}: ${input.title.trim()}`,
-    "",
-    `- \u72B6\u614B: ${status}`,
-    `- \u6C7A\u5B9A\u65E5: ${date}`,
-    `- \u6C7A\u5B9A\u8005: ${input.decidedBy.trim()}`,
-    "",
-    "#### \u80CC\u666F",
-    "",
-    ...blockLines(input.background),
-    "",
-    "#### \u691C\u8A0E\u3057\u305F\u9078\u629E\u80A2",
-    ""
-  ];
-  input.options.forEach((option, i) => {
-    lines.push(`${i + 1}. ${option.trim()}`);
-  });
-  lines.push(
-    "",
-    "#### \u63A1\u7528\u3057\u305F\u7D50\u8AD6",
-    "",
-    ...blockLines(input.conclusion),
-    "",
-    "#### \u7406\u7531",
-    "",
-    ...blockLines(input.rationale),
-    "",
-    "#### \u5F71\u97FF\u7BC4\u56F2",
-    "",
-    ...blockLines(input.impact)
-  );
-  return lines;
-}
-function blockLines(value) {
-  return value.replace(/\r\n/g, "\n").replace(/\r/g, "\n").replace(/[ \t\n]+$/, "").replace(/^\n+/, "").split("\n");
-}
-function normalizeSectionBody(body) {
-  return body.replace(/\r\n/g, "\n").replace(/\r/g, "\n").replace(/[ \t\n]+$/, "").replace(/^\n+/, "");
-}
-function applyAdrSection(current, body) {
-  const result = applySectionChanges(current, [
-    { heading: ADR_HEADING, body: normalizeAdrSeparators(body) }
-  ]);
-  if (!result.ok) {
-    if (result.error === "unclosed_fence") {
-      throw new AdrError(
-        "unclosed_fence",
-        "\u9589\u3058\u3066\u3044\u306A\u3044\u30B3\u30FC\u30C9\u30D5\u30A7\u30F3\u30B9\u304C\u3042\u308B\u305F\u3081\u3001ADR \u306E\u66F4\u65B0\u3092\u884C\u3044\u307E\u305B\u3093\u3002\u30D5\u30A7\u30F3\u30B9\u3092\u9589\u3058\u3066\u304B\u3089\u518D\u5B9F\u884C\u3057\u3066\u304F\u3060\u3055\u3044\u3002",
-        result.warnings
-      );
-    }
-    throw new AdrError("invalid_input", result.message, result.warnings);
-  }
-  return {
-    text: result.text,
-    created: result.created,
-    warnings: result.warnings
-  };
-}
-function verifyAdrResult(before, text, expected) {
-  const after = parseAdrDocument(text);
-  if (after.unclosedFence) {
-    throw new AdrError(
-      "unclosed_fence",
-      "\u7D44\u307F\u4E0A\u3052\u305F\u5F8C\u306E\u6587\u66F8\u306B\u9589\u3058\u3066\u3044\u306A\u3044\u30B3\u30FC\u30C9\u30D5\u30A7\u30F3\u30B9\u304C\u3042\u308A\u307E\u3059\u3002\u6563\u6587\u306E\u30D5\u30A7\u30F3\u30B9\u3092\u9589\u3058\u3066\u304F\u3060\u3055\u3044\u3002"
-    );
-  }
-  const outline = (source) => {
-    const headings = parseArchitecture(source).sections.map((s) => s.heading);
-    return {
-      others: headings.filter((h) => h !== ADR_HEADING).join("\n"),
-      adr: headings.filter((h) => h === ADR_HEADING).length
-    };
-  };
-  const was = outline(before.text);
-  const now = outline(text);
-  const actual = after.entries.map((e) => ({ id: e.id, status: e.statusRaw }));
-  if (was.others !== now.others || now.adr !== Math.max(was.adr, 1) || JSON.stringify(actual) !== JSON.stringify(expected)) {
-    throw new AdrError(
-      "invalid_input",
-      "\u7D44\u307F\u4E0A\u3052\u305F\u5F8C\u306E\u6587\u66F8\u3067\u3001ADR \u306E\u898B\u51FA\u3057\u30FB\u72B6\u614B\u30FB\u30BB\u30AF\u30B7\u30E7\u30F3\u306E\u4E26\u3073\u304C\u610F\u56F3\u3068\u9055\u3044\u307E\u3059\u3002\u6563\u6587\u306B `## ` \u306E\u898B\u51FA\u3057\u3084 ADR \u306E\u69CB\u9020\u306B\u5F53\u305F\u308B\u884C\u3092\u66F8\u304B\u306A\u3044\u3067\u304F\u3060\u3055\u3044\u3002"
-    );
-  }
-}
-function buildAdrAddition(current, rawInput, date) {
-  const input = normalizeInputNewlines(rawInput);
-  const validation = validateAdrAddInput(input);
-  throwOnErrors(validation);
-  const status = isAdrStatus(input.status) ? input.status : DEFAULT_ADR_STATUS;
-  const doc = parseAdrDocument(current);
-  if (doc.unclosedFence) {
-    throw new AdrError(
-      "unclosed_fence",
-      "\u9589\u3058\u3066\u3044\u306A\u3044\u30B3\u30FC\u30C9\u30D5\u30A7\u30F3\u30B9\u304C\u3042\u308B\u305F\u3081\u3001ADR \u306E\u8FFD\u52A0\u3092\u884C\u3044\u307E\u305B\u3093\u3002\u30D5\u30A7\u30F3\u30B9\u3092\u9589\u3058\u3066\u304B\u3089\u518D\u5B9F\u884C\u3057\u3066\u304F\u3060\u3055\u3044\u3002",
-      doc.warnings
-    );
-  }
-  const num = doc.nextNumber;
-  const rendered = renderAdrEntryLines(num, input, date, status).join("\n");
-  const existing = normalizeSectionBody(doc.sectionBody);
-  const body = existing === "" ? rendered : `${existing}
-
-${rendered}`;
-  const applied = applyAdrSection(current, body);
-  verifyAdrResult(doc, applied.text, [
-    ...doc.entries.map((e) => ({ id: e.id, status: e.statusRaw })),
-    { id: formatAdrId(num), status }
-  ]);
-  return {
-    text: applied.text,
-    id: formatAdrId(num),
-    number: num,
-    created: applied.created,
-    sectionCreated: !doc.hasSection,
-    status,
-    date,
-    warnings: [...validation.warnings, ...doc.warnings]
-  };
-}
-function buildAdrStatusChange(current, rawInput, date) {
-  const input = normalizeInputNewlines(rawInput);
-  const validation = validateAdrStatusInput(input);
-  throwOnErrors(validation);
-  const to = input.status;
-  const num = parseAdrId(input.id) ?? 0;
-  const doc = parseAdrDocument(current);
-  if (doc.unclosedFence) {
-    throw new AdrError(
-      "unclosed_fence",
-      "\u9589\u3058\u3066\u3044\u306A\u3044\u30B3\u30FC\u30C9\u30D5\u30A7\u30F3\u30B9\u304C\u3042\u308B\u305F\u3081\u3001\u72B6\u614B\u5909\u66F4\u3092\u884C\u3044\u307E\u305B\u3093\u3002\u30D5\u30A7\u30F3\u30B9\u3092\u9589\u3058\u3066\u304B\u3089\u518D\u5B9F\u884C\u3057\u3066\u304F\u3060\u3055\u3044\u3002",
-      doc.warnings
-    );
-  }
-  const entry = findAdrByNumber(doc, num);
-  if (entry === null) {
-    throw new AdrError(
-      "not_found",
-      `${formatAdrId(num)} \u304C \`## ${ADR_HEADING}\` \u306B\u3042\u308A\u307E\u305B\u3093\u3002\u30A8\u30F3\u30C8\u30EA\u306F\u524A\u9664\u3055\u308C\u306A\u3044\u305F\u3081\u3001\u756A\u53F7\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\u3002`
-    );
-  }
-  if (entry.statusLineIndex === null || entry.statusRaw === null) {
-    throw new AdrError(
-      "invalid_entry",
-      `${entry.id} \u306B \`- \u72B6\u614B:\` \u884C\u304C\u3042\u308A\u307E\u305B\u3093\u3002\u5951\u7D04 \xA76-1 \u306E\u66F8\u5F0F\u306B\u76F4\u3057\u3066\u304B\u3089\u518D\u5B9F\u884C\u3057\u3066\u304F\u3060\u3055\u3044\u3002`
-    );
-  }
-  const warnings = [...validation.warnings, ...doc.warnings];
-  const from = entry.statusRaw;
-  if (entry.status === null) {
-    warnings.push(
-      `${entry.id} \u306E\u73FE\u5728\u306E\u72B6\u614B\u300C${from}\u300D\u306F\u5024\u57DF(${ADR_STATUSES.join(" / ")})\u306E\u5916\u3067\u3059\u3002\u5C65\u6B74\u884C\u306B\u306F\u3053\u306E\u5024\u3092\u305D\u306E\u307E\u307E\u66F8\u304D\u307E\u3059\u3002`
-    );
-  }
-  if (from === to) {
-    warnings.push(
-      `${entry.id} \u306E\u72B6\u614B\u306F\u65E2\u306B\u300C${to}\u300D\u3067\u3059\u3002\u5C65\u6B74\u884C\u3060\u3051\u304C\u8FFD\u8A18\u3055\u308C\u307E\u3059\u3002`
-    );
-  }
-  const scan2 = scanFences(doc.sectionBody);
-  const chunks = scan2.lines.map((line) => line.raw);
-  const statusLine = scan2.lines[entry.statusLineIndex];
-  const m = STATUS_LINE_RE.exec(statusLine.text);
-  if (m === null) {
-    throw new AdrError(
-      "invalid_entry",
-      `${entry.id} \u306E \`- \u72B6\u614B:\` \u884C\u3092\u89E3\u6790\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F\u3002`
-    );
-  }
-  const lineEnding = statusLine.raw.slice(statusLine.text.length);
-  chunks[entry.statusLineIndex] = `${m[1]}${to}${lineEnding}`;
-  const previous = scan2.lines[entry.contentEndIndex - 1];
-  const continues = previous !== void 0 && STATUS_CHANGE_RE.test(previous.text);
-  const history = `- \u72B6\u614B\u5909\u66F4(${date}): ${from} \u2192 ${to}\u3002${input.reason.trim()}`;
-  chunks.splice(
-    entry.contentEndIndex,
-    0,
-    continues ? `${history}
-` : `
-${history}
-`
-  );
-  const applied = applyAdrSection(current, chunks.join(""));
-  verifyAdrResult(
-    doc,
-    applied.text,
-    doc.entries.map((e) => ({
-      id: e.id,
-      status: e === entry ? to : e.statusRaw
-    }))
-  );
-  return {
-    text: applied.text,
-    id: entry.id,
-    number: entry.number,
-    from,
-    to,
-    date,
-    warnings: [...warnings, ...applied.warnings]
-  };
-}
-function formatToday2(now) {
-  const y = String(now.getFullYear()).padStart(4, "0");
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  const d = String(now.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-function readTextIfExists2(filePath) {
-  try {
-    return fs3.readFileSync(filePath, "utf8");
-  } catch (error) {
-    const code = error?.code;
-    if (code === "ENOENT") return null;
-    throw error;
-  }
-}
-function withArchitectureLock(architecturePath, fn) {
-  try {
-    return withFileLock(architecturePath, fn);
-  } catch (error) {
-    if (error instanceof AdrError) throw error;
-    const code = error?.code;
-    if (code === "lock_timeout") {
-      throw new AdrError("lock_timeout", error.message);
-    }
-    throw error;
-  }
-}
-function stageAdr(architecturePath, input, options = {}) {
-  const now = options.now ?? /* @__PURE__ */ new Date();
-  if (input?.mode === "status") {
-    throwOnErrors(validateAdrStatusInput(input));
-    const date2 = input.changedOn ?? formatToday2(now);
-    return withArchitectureLock(architecturePath, () => {
-      const baseText = readTextIfExists2(architecturePath);
-      if (baseText === null) {
-        throw new AdrError(
-          "not_found",
-          `${architecturePath} \u304C\u5B58\u5728\u3057\u307E\u305B\u3093\u3002\u72B6\u614B\u3092\u5909\u66F4\u3059\u308B ADR \u304C\u3042\u308A\u307E\u305B\u3093\u3002`
-        );
-      }
-      const built = buildAdrStatusChange(baseText, input, date2);
-      return {
-        mode: "status",
-        path: architecturePath,
-        baseExists: true,
-        baseText,
-        nextText: built.text,
-        id: built.id,
-        number: built.number,
-        assignedId: null,
-        previousStatus: built.from,
-        status: built.to,
-        date: built.date,
-        created: false,
-        sectionCreated: false,
-        warnings: built.warnings
-      };
-    });
-  }
-  if (input?.mode !== "add") {
-    throw new AdrError(
-      "invalid_input",
-      `mode \u306F "add" \u307E\u305F\u306F "status" \u306E\u307F\u3092\u53D7\u3051\u4ED8\u3051\u307E\u3059(\u53D7\u9818: ${JSON.stringify(
-        input?.mode
-      )})\u3002`
-    );
-  }
-  throwOnErrors(validateAdrAddInput(input));
-  const date = input.decidedOn ?? formatToday2(now);
-  return withArchitectureLock(architecturePath, () => {
-    const baseText = readTextIfExists2(architecturePath);
-    const built = buildAdrAddition(baseText, input, date);
-    return {
-      mode: "add",
-      path: architecturePath,
-      baseExists: baseText !== null,
-      baseText: baseText ?? "",
-      nextText: built.text,
-      id: built.id,
-      number: built.number,
-      assignedId: built.id,
-      previousStatus: null,
-      status: built.status,
-      date: built.date,
-      created: built.created,
-      sectionCreated: built.sectionCreated,
-      warnings: built.warnings
-    };
-  });
-}
-
-// src/lib/adr-candidates.ts
-import { spawnSync } from "node:child_process";
-import crypto3 from "node:crypto";
-import fs5 from "node:fs";
-import path4 from "node:path";
-
-// src/lib/staging.ts
-import crypto2 from "node:crypto";
-import fs4 from "node:fs";
-import os from "node:os";
-import path3 from "node:path";
-var STAGING_DIR_NAME = "metatron-staging";
-var STAGING_RECORD_VERSION = 2;
-var DEFAULT_STAGING_TTL_MS = 30 * 60 * 1e3;
-function hashBuffer(buf) {
-  return crypto2.createHash("sha256").update(buf).digest("hex");
-}
-function hashContent(content) {
-  const buf = Buffer.isBuffer(content) ? content : Buffer.from(content, "utf8");
-  return hashBuffer(buf);
-}
-function hashFileOrNull(filePath) {
-  try {
-    return hashBuffer(fs4.readFileSync(filePath));
-  } catch {
-    return null;
-  }
-}
-function projectKey(projectRoot) {
-  let resolved;
-  try {
-    resolved = path3.resolve(projectRoot);
-  } catch {
-    resolved = projectRoot;
-  }
-  let real = resolved;
-  try {
-    real = fs4.realpathSync(resolved);
-  } catch {
-  }
-  return hashContent(real.split(path3.sep).join("/")).slice(0, 16);
-}
-function stagingRootDir() {
-  return path3.join(os.tmpdir(), STAGING_DIR_NAME);
-}
-function stagingDirFor(projectRoot) {
-  return path3.join(stagingRootDir(), projectKey(projectRoot));
-}
-var STAGING_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
-function isSafeStagingId(stagingId) {
-  return typeof stagingId === "string" && STAGING_ID_PATTERN.test(stagingId);
-}
-function stagingRecordPath(projectRoot, stagingId) {
-  if (!isSafeStagingId(stagingId)) return null;
-  return path3.join(stagingDirFor(projectRoot), `${stagingId}.json`);
-}
-function isInside(root, target) {
-  const rel = path3.relative(root, target);
-  if (rel === "" || rel === "..") return false;
-  return !rel.startsWith(`..${path3.sep}`) && !path3.isAbsolute(rel);
-}
-function isPlainObject(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-function isStagingKind(value) {
-  return value === "architecture" || value === "adr" || value === "gotchas";
-}
-function canonicalize(value) {
-  if (Array.isArray(value)) return value.map(canonicalize);
-  if (isPlainObject(value)) {
-    const out = {};
-    for (const key of Object.keys(value).sort()) {
-      const canonical = canonicalize(value[key]);
-      if (canonical !== void 0) out[key] = canonical;
-    }
-    return out;
-  }
-  return value;
-}
-function computeRecordHash(record) {
-  const { recordHash: _ignored, ...rest } = record;
-  const roundTripped = JSON.parse(JSON.stringify(rest));
-  return hashContent(JSON.stringify(canonicalize(roundTripped)));
-}
-function verifyRecordHash(record) {
-  return record.recordHash === computeRecordHash(record);
-}
-function tamperedReason(stagingId) {
-  return `staging ${stagingId} \u306E\u5185\u5BB9\u304C stage \u6642\u304B\u3089\u5909\u5316\u3057\u3066\u3044\u307E\u3059(recordHash \u4E0D\u4E00\u81F4)\u3002\u627F\u8A8D\u3055\u308C\u305F diff \u3068\u4E00\u81F4\u3057\u306A\u3044\u305F\u3081\u66F8\u304D\u8FBC\u307F\u307E\u305B\u3093\u3002stage \u304B\u3089\u3084\u308A\u76F4\u3057\u3066\u304F\u3060\u3055\u3044\u3002`;
-}
-function parseRecord(raw, stagingId) {
-  if (!isPlainObject(raw)) return null;
-  if (raw.stagingId !== stagingId) return null;
-  if (typeof raw.version !== "number") return null;
-  if (!isStagingKind(raw.kind)) return null;
-  if (typeof raw.targetPath !== "string" || raw.targetPath === "") return null;
-  if (typeof raw.nextContent !== "string") return null;
-  if (raw.baseHash !== null && typeof raw.baseHash !== "string") return null;
-  if (typeof raw.createdAt !== "number") return null;
-  if (typeof raw.expiresAt !== "number") return null;
-  if (raw.usedAt !== null && typeof raw.usedAt !== "number") return null;
-  return {
-    version: raw.version,
-    stagingId,
-    kind: raw.kind,
-    targetPath: raw.targetPath,
-    baseHash: raw.baseHash,
-    nextContent: raw.nextContent,
-    createdAt: raw.createdAt,
-    expiresAt: raw.expiresAt,
-    usedAt: raw.usedAt,
-    meta: isPlainObject(raw.meta) ? raw.meta : {},
-    // 欄ごと消された場合は空文字にする。sha256 の hex とは決して一致しないため、
-    // 「レコードとしては読めたが整合していない」= tampered に落ちる。
-    recordHash: typeof raw.recordHash === "string" ? raw.recordHash : ""
-  };
-}
-function loadRecord(projectRoot, stagingId) {
-  const recordPath = stagingRecordPath(projectRoot, stagingId);
-  if (recordPath === null) return null;
-  try {
-    const text = fs4.readFileSync(recordPath, "utf8");
-    return parseRecord(JSON.parse(text), stagingId);
-  } catch {
-    return null;
-  }
-}
-function writeRecord(recordPath, record) {
-  const dir = path3.dirname(recordPath);
-  fs4.mkdirSync(dir, { recursive: true });
-  const tmpPath = `${recordPath}.tmp-${crypto2.randomUUID()}`;
-  const body = `${JSON.stringify(record, null, 2)}
-`;
-  fs4.writeFileSync(tmpPath, body, { encoding: "utf8", mode: 384 });
-  try {
-    fs4.renameSync(tmpPath, recordPath);
-  } catch (err) {
-    try {
-      fs4.rmSync(tmpPath, { force: true });
-    } catch {
-    }
-    throw err;
-  }
-}
-function createStaging(input) {
-  const errors = input.validationErrors ?? [];
-  if (errors.length > 0) {
-    return { ok: false, error: "invalid", reasons: [...errors] };
-  }
-  const projectRoot = path3.resolve(input.projectRoot);
-  const targetPath = path3.resolve(projectRoot, input.targetPath);
-  if (!isInside(projectRoot, targetPath)) {
-    return {
-      ok: false,
-      error: "invalid",
-      reasons: [
-        `\u66F8\u304D\u8FBC\u307F\u5BFE\u8C61 ${targetPath} \u304C\u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u30EB\u30FC\u30C8 ${projectRoot} \u306E\u5916\u3092\u6307\u3057\u3066\u3044\u307E\u3059\u3002`
-      ]
-    };
-  }
-  const now = input.now ?? Date.now();
-  const ttlMs = typeof input.ttlMs === "number" && Number.isFinite(input.ttlMs) && input.ttlMs > 0 ? input.ttlMs : DEFAULT_STAGING_TTL_MS;
-  const baseHash = input.baseHash === void 0 ? hashFileOrNull(targetPath) : input.baseHash;
-  const stagingId = crypto2.randomUUID();
-  const draft = {
-    version: STAGING_RECORD_VERSION,
-    stagingId,
-    kind: input.kind,
-    targetPath,
-    baseHash,
-    nextContent: input.nextContent,
-    createdAt: now,
-    expiresAt: now + ttlMs,
-    usedAt: null,
-    meta: input.meta ?? {}
-  };
-  const recordPath = path3.join(stagingDirFor(projectRoot), `${stagingId}.json`);
-  try {
-    writeRecord(recordPath, { ...draft, recordHash: computeRecordHash(draft) });
-  } catch (err) {
-    return {
-      ok: false,
-      error: "staging_unavailable",
-      reasons: [`staging \u3092\u4FDD\u5B58\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F(${recordPath}): ${String(err)}`]
-    };
-  }
-  return {
-    ok: true,
-    stagingId,
-    recordPath,
-    targetPath,
-    baseHash,
-    createdAt: draft.createdAt,
-    expiresAt: draft.expiresAt
-  };
-}
-function readStaging(projectRoot, stagingId) {
-  const record = loadRecord(projectRoot, stagingId);
-  if (record === null) {
-    return {
-      ok: false,
-      error: "unknown_id",
-      reason: `staging ${stagingId} \u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093\u3002stage \u304B\u3089\u3084\u308A\u76F4\u3057\u3066\u304F\u3060\u3055\u3044\u3002`
-    };
-  }
-  if (!verifyRecordHash(record)) {
-    return {
-      ok: false,
-      error: "tampered",
-      reason: tamperedReason(record.stagingId)
-    };
-  }
-  return { ok: true, record };
-}
-function commitStaging(input) {
-  const projectRoot = path3.resolve(input.projectRoot);
-  const now = input.now ?? Date.now();
-  const record = loadRecord(projectRoot, input.stagingId);
-  if (record === null) {
-    return {
-      ok: false,
-      error: "unknown_id",
-      reason: `staging ${input.stagingId} \u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093\u3002stage \u304B\u3089\u3084\u308A\u76F4\u3057\u3066\u304F\u3060\u3055\u3044\u3002`
-    };
-  }
-  if (!verifyRecordHash(record)) {
-    return {
-      ok: false,
-      error: "tampered",
-      reason: tamperedReason(record.stagingId)
-    };
-  }
-  if (record.usedAt !== null) {
-    return {
-      ok: false,
-      error: "already_used",
-      reason: `staging ${record.stagingId} \u306F\u65E2\u306B\u4F7F\u7528\u6E08\u307F\u3067\u3059(${new Date(record.usedAt).toISOString()})\u3002stage \u304B\u3089\u3084\u308A\u76F4\u3057\u3066\u304F\u3060\u3055\u3044\u3002`
-    };
-  }
-  if (now >= record.expiresAt) {
-    return {
-      ok: false,
-      error: "expired",
-      reason: `staging ${record.stagingId} \u306F\u6709\u52B9\u671F\u9650(${new Date(record.expiresAt).toISOString()})\u3092\u904E\u304E\u3066\u3044\u307E\u3059\u3002stage \u304B\u3089\u3084\u308A\u76F4\u3057\u3066\u304F\u3060\u3055\u3044\u3002`
-    };
-  }
-  if (!isInside(projectRoot, record.targetPath)) {
-    return {
-      ok: false,
-      error: "unknown_id",
-      reason: `staging ${record.stagingId} \u306E\u66F8\u304D\u8FBC\u307F\u5148\u304C\u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u30EB\u30FC\u30C8\u306E\u5916\u3092\u6307\u3057\u3066\u3044\u307E\u3059\u3002stage \u304B\u3089\u3084\u308A\u76F4\u3057\u3066\u304F\u3060\u3055\u3044\u3002`
-    };
-  }
-  const currentHash = hashFileOrNull(record.targetPath);
-  if (currentHash !== record.baseHash) {
-    const before = record.baseHash === null ? "\u672A\u4F5C\u6210" : record.baseHash;
-    const after = currentHash === null ? "\u672A\u4F5C\u6210" : currentHash;
-    return {
-      ok: false,
-      error: "file_changed",
-      reason: `${record.targetPath} \u304C stage \u5F8C\u306B\u5909\u5316\u3057\u3066\u3044\u307E\u3059(${before} \u2192 ${after})\u3002stage \u304B\u3089\u3084\u308A\u76F4\u3057\u3066\u304F\u3060\u3055\u3044\u3002`
-    };
-  }
-  const recordPath = stagingRecordPath(projectRoot, record.stagingId);
-  if (recordPath === null) {
-    return {
-      ok: false,
-      error: "unknown_id",
-      reason: `staging ${record.stagingId} \u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093\u3002stage \u304B\u3089\u3084\u308A\u76F4\u3057\u3066\u304F\u3060\u3055\u3044\u3002`
-    };
-  }
-  try {
-    const used = { ...record, usedAt: now };
-    writeRecord(recordPath, { ...used, recordHash: computeRecordHash(used) });
-  } catch (err) {
-    return {
-      ok: false,
-      error: "staging_unavailable",
-      reason: `staging ${record.stagingId} \u3092\u4F7F\u7528\u6E08\u307F\u306B\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F(${recordPath}): ${String(err)}\u3002\u5358\u56DE\u4F7F\u7528\u3092\u4FDD\u8A3C\u3067\u304D\u306A\u3044\u305F\u3081\u66F8\u304D\u8FBC\u307F\u307E\u305B\u3093\u3002${record.targetPath} \u306F\u5909\u66F4\u3057\u3066\u3044\u307E\u305B\u3093\u3002`
-    };
-  }
-  const buf = Buffer.from(record.nextContent, "utf8");
-  try {
-    writeFileAtomic(record.targetPath, buf);
-  } catch (err) {
-    return {
-      ok: false,
-      error: "write_failed",
-      reason: `${record.targetPath} \u3078\u66F8\u304D\u8FBC\u3081\u307E\u305B\u3093\u3067\u3057\u305F: ${String(err)}\u3002\u3053\u306E staging \u306F\u6D88\u8CBB\u6E08\u307F\u306B\u306A\u3063\u305F\u305F\u3081\u3001stage \u304B\u3089\u3084\u308A\u76F4\u3057\u3066\u304F\u3060\u3055\u3044\u3002`
-    };
-  }
-  return {
-    ok: true,
-    stagingId: record.stagingId,
-    kind: record.kind,
-    path: record.targetPath,
-    bytesWritten: buf.byteLength,
-    meta: record.meta,
-    warnings: []
-  };
-}
-
-// src/lib/adr-candidates.ts
-var DOMAINS_DIR_RELATIVE = "docs/intents/domains";
-var CANDIDATE_SECTIONS = [
-  { key: "background", heading: "\u80CC\u666F" },
-  { key: "options", heading: "\u691C\u8A0E\u3057\u305F\u9078\u629E\u80A2" },
-  { key: "conclusion", heading: "\u63A1\u7528\u3057\u305F\u7D50\u8AD6" },
-  { key: "rationale", heading: "\u7406\u7531" },
-  { key: "impact", heading: "\u5F71\u97FF\u7BC4\u56F2" }
-];
-var AdrCandidateError = class extends Error {
-  code;
-  constructor(code, message) {
-    super(message);
-    this.name = "AdrCandidateError";
-    this.code = code;
-  }
-};
-var BOUNDARY_RE = /^ {0,3}#{2,3}(?:[ \t]|$)/;
-var H3_RE = /^ {0,3}###[ \t]+(.*)$/;
-var SUBHEADING_RE2 = /^ {0,3}####[ \t]+(.*?)[ \t]*$/;
-var FIELD_RE = /^ {0,3}-[ \t]+(制約|決定日|出典 intent)[ \t]*:[ \t]*(.*?)[ \t]*$/;
-var MARK_PREFIX = "[ADR \u5019\u88DC";
-var MARKED_HEADING_RE = /^(.*?)[ \t]*\[ADR 候補: ([^\]\s]+-\d+)\][ \t]*$/;
-var MARK_STRIP_RE = /[ \t]*\[ADR 候補: [^\]]+\][ \t]*$/;
-var REFERENCE_TOKEN_RE = /\(候補 ID: ([^)]+)\)/g;
-var ADR_CANDIDATE_LINE_RE = /^ADR 候補 ID: (.+)$/;
-function findRepoRoot(docRoot) {
-  try {
-    const res = spawnSync("git", ["rev-parse", "--show-toplevel"], {
-      cwd: docRoot,
-      encoding: "utf8",
-      timeout: 5e3,
-      windowsHide: true
-    });
-    if (res.status !== 0) return null;
-    const out = res.stdout?.trim();
-    return out ? path4.resolve(out) : null;
-  } catch {
-    return null;
-  }
-}
-function realpathOrSelf(p) {
-  try {
-    return fs5.realpathSync(p);
-  } catch {
-    return p;
-  }
-}
-function isInside2(root, target) {
-  const rel = path4.relative(root, target);
-  return rel !== ".." && !rel.startsWith(`..${path4.sep}`) && !path4.isAbsolute(rel);
-}
-function domainsDirStaysInRepo(repoRoot, dir) {
-  return isInside2(realpathOrSelf(repoRoot), realpathOrSelf(dir));
-}
-function trimBlankLines(lines) {
-  let s = 0;
-  let e = lines.length;
-  while (s < e && lines[s].trim() === "") s++;
-  while (e > s && lines[e - 1].trim() === "") e--;
-  return lines.slice(s, e).join("\n");
-}
-function lineOffsets(buf) {
-  const offsets = [0];
-  for (let i = 0; i < buf.length; i++) {
-    if (buf[i] === 10) offsets.push(i + 1);
-  }
-  return (lineIndex) => offsets[lineIndex] ?? buf.length;
-}
-function parseDomainFile(buf) {
-  const { lines, insideFence } = scanFences(buf.toString("utf8"));
-  const boundaries = [];
-  const referenceIds = [];
-  for (let i = 0; i < lines.length; i++) {
-    if (insideFence[i]) continue;
-    if (BOUNDARY_RE.test(lines[i].text)) boundaries.push(i);
-    for (const m of lines[i].text.matchAll(REFERENCE_TOKEN_RE)) {
-      referenceIds.push(m[1].trim());
-    }
-  }
-  const entries = [];
-  const idlessHeadings = [];
-  boundaries.forEach((start, k) => {
-    const h3 = H3_RE.exec(lines[start].text);
-    if (h3 === null || !h3[1].includes(MARK_PREFIX)) return;
-    const mark = MARKED_HEADING_RE.exec(h3[1]);
-    if (mark === null) {
-      idlessHeadings.push(lines[start].text.trim());
-      return;
-    }
-    const end = boundaries[k + 1] ?? lines.length;
-    let contentEnd = end;
-    while (contentEnd > start + 1 && !insideFence[contentEnd - 1] && lines[contentEnd - 1].text.trim() === "") {
-      contentEnd--;
-    }
-    const entry = {
-      candidateId: mark[2],
-      heading: lines[start].text,
-      title: mark[1].trim(),
-      start,
-      end,
-      contentEnd,
-      constraintLine: null,
-      constraint: null,
-      decidedOn: null,
-      sourceIntents: [],
-      sections: {}
-    };
-    const bodies = {};
-    let current = null;
-    for (let i = start + 1; i < end; i++) {
-      const text = lines[i].text;
-      if (!insideFence[i]) {
-        const sub = SUBHEADING_RE2.exec(text);
-        const def = sub && CANDIDATE_SECTIONS.find((s) => s.heading === sub[1]);
-        if (def && bodies[def.key] === void 0) {
-          current = def.key;
-          bodies[current] = [];
-          continue;
-        }
-        if (current === null) {
-          const field = FIELD_RE.exec(text);
-          if (field !== null) {
-            if (field[1] === "\u51FA\u5178 intent") {
-              entry.sourceIntents.push(field[2]);
-            } else if (field[1] === "\u5236\u7D04" && entry.constraint === null) {
-              entry.constraint = field[2];
-              entry.constraintLine = text;
-            } else if (field[1] === "\u6C7A\u5B9A\u65E5" && entry.decidedOn === null) {
-              entry.decidedOn = field[2];
-            }
-            continue;
-          }
-        }
-      }
-      if (current !== null) bodies[current]?.push(text);
-    }
-    for (const [key, body] of Object.entries(bodies)) {
-      entry.sections[key] = trimBlankLines(body ?? []);
-    }
-    entries.push(entry);
-  });
-  return {
-    entries,
-    idlessHeadings,
-    referenceIds,
-    offsetOf: lineOffsets(buf),
-    buf
-  };
-}
-function entryHash(file, entry) {
-  return hashContent(
-    file.buf.subarray(file.offsetOf(entry.start), file.offsetOf(entry.end))
-  );
-}
-function candidateIdsIn(entry) {
-  const ids = [];
-  const { lines, insideFence } = scanFences(entry.raw);
-  for (let i = 0; i < lines.length; i++) {
-    if (insideFence[i]) continue;
-    const m = ADR_CANDIDATE_LINE_RE.exec(lines[i].text.trim());
-    if (m !== null) ids.push(m[1]);
-  }
-  return ids;
-}
-function readTextOrNull(filePath) {
-  try {
-    return fs5.readFileSync(filePath, "utf8");
-  } catch {
-    return null;
-  }
-}
-function scanAdrCandidates(docRoot, architecturePath) {
-  const repoRoot = findRepoRoot(docRoot);
-  if (repoRoot === null) return { repoRoot: null, candidates: [], warnings: [] };
-  const warnings = [];
-  const dir = path4.join(repoRoot, DOMAINS_DIR_RELATIVE);
-  if (!domainsDirStaysInRepo(repoRoot, dir)) {
-    warnings.push(
-      `${DOMAINS_DIR_RELATIVE} \u306E\u5B9F\u4F53\u304C\u30EA\u30DD\u30B8\u30C8\u30EA\u306E\u5916\u306B\u3042\u308A\u307E\u3059\u3002\u8D70\u67FB\u3057\u307E\u305B\u3093\u3002`
-    );
-    return { repoRoot, candidates: [], warnings };
-  }
-  let names;
-  try {
-    names = fs5.readdirSync(dir, { withFileTypes: true }).filter((d) => d.isFile() && d.name.endsWith(".md")).map((d) => d.name).sort();
-  } catch (error) {
-    if (error.code !== "ENOENT") {
-      warnings.push(`${DOMAINS_DIR_RELATIVE} \u3092\u8AAD\u3081\u307E\u305B\u3093\u3067\u3057\u305F\u3002`);
-    }
-    return { repoRoot, candidates: [], warnings };
-  }
-  const adopted = /* @__PURE__ */ new Map();
-  const adrDoc = parseAdrDocument(readTextOrNull(architecturePath));
-  for (const entry of adrDoc.entries) {
-    for (const id of candidateIdsIn(entry)) {
-      if (!adopted.has(id)) adopted.set(id, entry.id);
-    }
-  }
-  const candidates = [];
-  for (const name of names) {
-    const filePath = path4.join(dir, name);
-    const relative = `${DOMAINS_DIR_RELATIVE}/${name}`;
-    let parsed;
-    try {
-      parsed = parseDomainFile(fs5.readFileSync(filePath));
-    } catch {
-      warnings.push(`${relative} \u3092\u8AAD\u3081\u307E\u305B\u3093\u3067\u3057\u305F\u3002`);
-      continue;
-    }
-    for (const heading of parsed.idlessHeadings) {
-      warnings.push(
-        `${relative}: \u898B\u51FA\u3057\u300C${heading}\u300D\u306E\u5370\u306B\u5019\u88DC ID \u304C\u3042\u308A\u307E\u305B\u3093\u3002\u5019\u88DC\u306B\u3057\u307E\u305B\u3093\u3002`
-      );
-    }
-    const counts = /* @__PURE__ */ new Map();
-    for (const id of [
-      ...parsed.entries.map((e) => e.candidateId),
-      ...parsed.referenceIds
-    ]) {
-      counts.set(id, (counts.get(id) ?? 0) + 1);
-    }
-    for (const entry of parsed.entries) {
-      const count = counts.get(entry.candidateId) ?? 0;
-      if (count > 1) {
-        warnings.push(
-          `${relative}: \u5019\u88DC ID ${entry.candidateId} \u304C\u3053\u306E\u30D5\u30A1\u30A4\u30EB\u306B ${count} \u56DE\u73FE\u308C\u307E\u3059\u3002\u5019\u88DC\u306B\u3057\u307E\u305B\u3093\u3002`
-        );
-        continue;
-      }
-      const missing = CANDIDATE_SECTIONS.filter(
-        (s) => entry.sections[s.key] === void 0
-      ).map((s) => s.heading);
-      if (missing.length > 0) {
-        warnings.push(
-          `${relative}: \u5019\u88DC ${entry.candidateId} \u306B\u5C0F\u898B\u51FA\u3057\u304C\u63C3\u3063\u3066\u3044\u307E\u305B\u3093(\u6B20\u3051: ${missing.join("\u3001")})\u3002\u5019\u88DC\u306B\u3057\u307E\u305B\u3093\u3002`
-        );
-        continue;
-      }
-      candidates.push({
-        file: filePath,
-        relative,
-        candidateId: entry.candidateId,
-        heading: entry.heading,
-        title: entry.title,
-        constraint: entry.constraint,
-        decidedOn: entry.decidedOn,
-        sourceIntents: entry.sourceIntents,
-        sections: entry.sections,
-        hash: entryHash(parsed, entry),
-        adoptedAs: adopted.get(entry.candidateId) ?? null
-      });
-    }
-  }
-  return { repoRoot, candidates, warnings };
-}
-function resolveDomainFile(repoRoot, file) {
-  const dir = path4.join(repoRoot, DOMAINS_DIR_RELATIVE);
-  const target = path4.resolve(file);
-  const outside = new AdrCandidateError(
-    "outside_domains_dir",
-    `${file} \u306F ${dir} \u306E\u76F4\u4E0B\u306B\u3042\u308B .md \u3067\u306F\u3042\u308A\u307E\u305B\u3093\u3002\u7E2E\u7D04\u306F\u305D\u3053\u306B\u3042\u308B\u6301\u7D9A\u5C64\u306E\u30D5\u30A1\u30A4\u30EB\u3060\u3051\u3092\u66F8\u304D\u63DB\u3048\u307E\u3059\u3002`
-  );
-  if (path4.extname(target) !== ".md") throw outside;
-  if (!domainsDirStaysInRepo(repoRoot, dir)) throw outside;
-  if (realpathOrSelf(path4.dirname(target)) !== realpathOrSelf(dir)) {
-    throw outside;
-  }
-  let stat;
-  try {
-    stat = fs5.lstatSync(target);
-  } catch {
-    throw new AdrCandidateError("file_not_found", `${target} \u304C\u3042\u308A\u307E\u305B\u3093\u3002`);
-  }
-  if (!stat.isFile()) throw outside;
-  return { target, mode: stat.mode & 511 };
-}
-function writeAtomically(target, content, mode) {
-  const tmp = `${target}.tmp-${crypto3.randomUUID()}`;
-  try {
-    fs5.writeFileSync(tmp, content, { mode });
-    fs5.renameSync(tmp, target);
-  } catch (error) {
-    try {
-      fs5.rmSync(tmp, { force: true });
-    } catch {
-    }
-    const reason = error instanceof Error ? error.message : String(error);
-    throw new AdrCandidateError(
-      "write_failed",
-      `${target} \u3092\u66F8\u304D\u8FBC\u3081\u307E\u305B\u3093\u3067\u3057\u305F: ${reason}`
-    );
-  }
-}
-function shrinkAdrCandidate(input) {
-  const { candidateId } = input;
-  const adr = formatAdrId(input.adrNumber);
-  const repoRoot = findRepoRoot(input.docRoot);
-  if (repoRoot === null) {
-    throw new AdrCandidateError(
-      "not_git_repository",
-      `${input.docRoot} \u306F git \u30EA\u30DD\u30B8\u30C8\u30EA\u306E\u4E2D\u306B\u306A\u3044\u305F\u3081\u3001\u6301\u7D9A\u5C64\u306E\u7F6E\u304D\u5834\u3092\u6C7A\u3081\u3089\u308C\u307E\u305B\u3093\u3002`
-    );
-  }
-  const { target, mode } = resolveDomainFile(repoRoot, input.file);
-  const parsed = parseDomainFile(fs5.readFileSync(target));
-  const marked = parsed.entries.filter((e) => e.candidateId === candidateId);
-  const references = parsed.referenceIds.filter((id) => id === candidateId);
-  if (marked.length === 0) {
-    if (references.length > 0) {
-      return { file: target, candidateId, adr, written: false };
-    }
-    throw new AdrCandidateError(
-      "candidate_not_found",
-      `${target} \u306B\u5019\u88DC ID ${candidateId} \u306E\u30A8\u30F3\u30C8\u30EA\u304C\u3042\u308A\u307E\u305B\u3093\u3002`
-    );
-  }
-  if (marked.length + references.length > 1) {
-    throw new AdrCandidateError(
-      "duplicate_candidate",
-      `${target} \u306B\u5019\u88DC ID ${candidateId} \u304C ${marked.length + references.length} \u56DE\u73FE\u308C\u307E\u3059\u3002\u3069\u306E\u30A8\u30F3\u30C8\u30EA\u3092\u7E2E\u3081\u308B\u304B\u6C7A\u3081\u3089\u308C\u307E\u305B\u3093\u3002`
-    );
-  }
-  const entry = marked[0];
-  const adrEntry = findAdrByNumber(
-    parseAdrDocument(readTextOrNull(input.architecturePath)),
-    input.adrNumber
-  );
-  if (adrEntry === null) {
-    throw new AdrCandidateError(
-      "adr_not_found",
-      `${input.architecturePath} \u306B ${adr} \u304C\u3042\u308A\u307E\u305B\u3093\u3002`
-    );
-  }
-  if (!candidateIdsIn(adrEntry).includes(candidateId)) {
-    throw new AdrCandidateError(
-      "candidate_id_line_missing",
-      `${adr} \u306E\u672C\u6587\u306B\u300CADR \u5019\u88DC ID: ${candidateId}\u300D\u306E\u884C\u304C\u3042\u308A\u307E\u305B\u3093\u3002`
-    );
-  }
-  if (entryHash(parsed, entry) !== input.hash) {
-    throw new AdrCandidateError(
-      "hash_mismatch",
-      `\u5019\u88DC ${candidateId} \u306E\u30A8\u30F3\u30C8\u30EA\u304C\u8D70\u67FB\u306E\u3068\u304D\u304B\u3089\u5909\u308F\u3063\u3066\u3044\u307E\u3059\u3002\u8D70\u67FB\u3057\u76F4\u3057\u3066\u304F\u3060\u3055\u3044\u3002`
-    );
-  }
-  const heading = parsed.buf.subarray(
-    parsed.offsetOf(entry.start),
-    parsed.offsetOf(entry.start + 1)
-  );
-  const eol = heading.toString("utf8").endsWith("\r\n") ? "\r\n" : "\n";
-  const lastLine = parsed.buf.subarray(
-    parsed.offsetOf(entry.contentEnd - 1),
-    parsed.offsetOf(entry.contentEnd)
-  ).toString("utf8");
-  const terminator = lastLine.endsWith("\r\n") ? "\r\n" : lastLine.endsWith("\n") ? "\n" : "";
-  const replacement = [
-    entry.heading.replace(MARK_STRIP_RE, ""),
-    ...entry.constraintLine === null ? [] : [entry.constraintLine],
-    `- \u95A2\u9023 ADR: ${adr}(\u5019\u88DC ID: ${candidateId})`
-  ].join(eol);
-  const next = Buffer.concat([
-    parsed.buf.subarray(0, parsed.offsetOf(entry.start)),
-    Buffer.from(`${replacement}${terminator}`, "utf8"),
-    parsed.buf.subarray(parsed.offsetOf(entry.contentEnd))
-  ]);
-  let current;
-  try {
-    current = fs5.readFileSync(target);
-  } catch {
-    current = null;
-  }
-  if (current === null || !current.equals(parsed.buf)) {
-    throw new AdrCandidateError(
-      "file_changed",
-      `${target} \u304C\u7E2E\u7D04\u306E\u9014\u4E2D\u3067\u5909\u308F\u308A\u307E\u3057\u305F\u3002\u8D70\u67FB\u3057\u76F4\u3057\u3066\u304F\u3060\u3055\u3044\u3002`
-    );
-  }
-  writeAtomically(target, next, mode);
-  return { file: target, candidateId, adr, written: true };
-}
-
-// src/lib/config.ts
-import { spawnSync as spawnSync2 } from "node:child_process";
-import fs6 from "node:fs";
-import path5 from "node:path";
 var CONFIG_FILENAME = "metatron.config.json";
 var SUPPORTED_VERSION = 1;
 var DEFAULT_ARCHITECTURE_PATH = "docs/ARCHITECTURE.md";
-var DEFAULT_GOTCHAS_PATH = "docs/GOTCHAS.md";
-function isPlainObject2(value) {
+function isPlainObject(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-function realpathOrSelf2(dir) {
+function realpathOrSelf(dir) {
   try {
-    return fs6.realpathSync(dir);
+    return fs.realpathSync(dir);
   } catch {
     return dir;
   }
 }
 function hasConfigFile(dir) {
   try {
-    return fs6.existsSync(path5.join(dir, CONFIG_FILENAME));
+    return fs.existsSync(path.join(dir, CONFIG_FILENAME));
+  } catch {
+    return false;
+  }
+}
+function existsGit(dir) {
+  try {
+    return fs.existsSync(path.join(dir, ".git"));
   } catch {
     return false;
   }
 }
 function gitToplevel(cwd) {
   try {
-    const res = spawnSync2("git", ["rev-parse", "--show-toplevel"], {
+    const res = spawnSync("git", ["rev-parse", "--show-toplevel"], {
       cwd,
       encoding: "utf8",
       timeout: 5e3,
@@ -2899,19 +643,20 @@ function gitToplevel(cwd) {
     if (res.status !== 0) return null;
     const out = res.stdout?.trim();
     if (!out) return null;
-    return path5.resolve(out);
+    return path.resolve(out);
   } catch {
     return null;
   }
 }
 function findDocRoot(startDir) {
-  const start = realpathOrSelf2(path5.resolve(startDir ?? process.cwd()));
+  const start = realpathOrSelf(path.resolve(startDir ?? process.cwd()));
+  if (hasConfigFile(start)) return start;
   const top = gitToplevel(start);
   let dir = start;
   while (true) {
     if (hasConfigFile(dir)) return dir;
-    if (top && dir === top) break;
-    const parent = path5.dirname(dir);
+    if (top ? dir === top : existsGit(dir)) break;
+    const parent = path.dirname(dir);
     if (parent === dir) break;
     dir = parent;
   }
@@ -2922,15 +667,15 @@ function normalizeSeparators(value) {
   return value.replace(/\\/g, "/");
 }
 function looksAbsolute(value) {
-  return path5.isAbsolute(value) || /^[A-Za-z]:\//.test(value) || value.startsWith("//");
+  return path.isAbsolute(value) || /^[A-Za-z]:\//.test(value) || value.startsWith("//");
 }
 function toPosix(value) {
-  return value.split(path5.sep).join("/");
+  return value.split(path.sep).join("/");
 }
 function resolveConfiguredPath(docRoot, raw, fallback, label, warnings) {
   const useFallback = () => ({
     relative: fallback,
-    absolute: path5.resolve(docRoot, fallback)
+    absolute: path.resolve(docRoot, fallback)
   });
   if (raw === void 0) return useFallback();
   if (typeof raw !== "string" || raw.trim() === "") {
@@ -2946,9 +691,9 @@ function resolveConfiguredPath(docRoot, raw, fallback, label, warnings) {
     );
     return useFallback();
   }
-  const absolute = path5.resolve(docRoot, value);
-  const relative = path5.relative(docRoot, absolute);
-  const escapes = relative === "" || relative === ".." || relative.startsWith(`..${path5.sep}`) || path5.isAbsolute(relative);
+  const absolute = path.resolve(docRoot, value);
+  const relative = path.relative(docRoot, absolute);
+  const escapes = relative === "" || relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative);
   if (escapes) {
     warnings.push(
       `paths.${label} \u304C\u30EB\u30FC\u30C8\u5916(${raw})\u3092\u6307\u3059\u305F\u3081\u3001\u65E2\u5B9A\u5024 ${fallback} \u3092\u4F7F\u7528\u3057\u307E\u3059\u3002`
@@ -2960,26 +705,24 @@ function resolveConfiguredPath(docRoot, raw, fallback, label, warnings) {
 function defaultsFor(docRoot, warnings) {
   return {
     docRoot,
-    configPath: path5.join(docRoot, CONFIG_FILENAME),
+    configPath: path.join(docRoot, CONFIG_FILENAME),
     configExists: false,
-    architecturePath: path5.resolve(docRoot, DEFAULT_ARCHITECTURE_PATH),
-    gotchasPath: path5.resolve(docRoot, DEFAULT_GOTCHAS_PATH),
+    architecturePath: path.resolve(docRoot, DEFAULT_ARCHITECTURE_PATH),
     architectureRelative: DEFAULT_ARCHITECTURE_PATH,
-    gotchasRelative: DEFAULT_GOTCHAS_PATH,
     warnings
   };
 }
 function loadConfigInner(startDir) {
   const warnings = [];
   const docRoot = findDocRoot(startDir);
-  const configPath = path5.join(docRoot, CONFIG_FILENAME);
+  const configPath = path.join(docRoot, CONFIG_FILENAME);
   let configExists = false;
   let parsed;
   let parseOk = false;
   try {
-    if (fs6.existsSync(configPath)) {
+    if (fs.existsSync(configPath)) {
       configExists = true;
-      parsed = JSON.parse(fs6.readFileSync(configPath, "utf8"));
+      parsed = JSON.parse(fs.readFileSync(configPath, "utf8"));
       parseOk = true;
     }
   } catch {
@@ -2987,7 +730,7 @@ function loadConfigInner(startDir) {
   }
   let source;
   if (parseOk) {
-    if (isPlainObject2(parsed)) {
+    if (isPlainObject(parsed)) {
       source = parsed;
     } else {
       warnings.push(
@@ -3005,7 +748,7 @@ function loadConfigInner(startDir) {
     }
   }
   const pathsRaw = source?.paths;
-  const paths = isPlainObject2(pathsRaw) ? pathsRaw : void 0;
+  const paths = isPlainObject(pathsRaw) ? pathsRaw : void 0;
   if (pathsRaw !== void 0 && paths === void 0) {
     warnings.push(
       "paths \u304C\u30AA\u30D6\u30B8\u30A7\u30AF\u30C8\u3067\u306A\u3044\u305F\u3081\u3001\u6587\u66F8\u30D1\u30B9\u306B\u65E2\u5B9A\u5024\u3092\u4F7F\u7528\u3057\u307E\u3059\u3002"
@@ -3018,21 +761,12 @@ function loadConfigInner(startDir) {
     "architecture",
     warnings
   );
-  const gotchas = resolveConfiguredPath(
-    docRoot,
-    paths?.gotchas,
-    DEFAULT_GOTCHAS_PATH,
-    "gotchas",
-    warnings
-  );
   return {
     docRoot,
     configPath,
     configExists,
     architecturePath: architecture.absolute,
-    gotchasPath: gotchas.absolute,
     architectureRelative: architecture.relative,
-    gotchasRelative: gotchas.relative,
     warnings
   };
 }
@@ -3042,7 +776,7 @@ function loadConfig(startDir) {
   } catch {
     let docRoot;
     try {
-      docRoot = path5.resolve(startDir ?? process.cwd());
+      docRoot = path.resolve(startDir ?? process.cwd());
     } catch {
       docRoot = startDir ?? ".";
     }
@@ -3052,202 +786,10 @@ function loadConfig(startDir) {
   }
 }
 
-// src/cli/args.ts
-var BOOLEAN_FLAGS = /* @__PURE__ */ new Set([
-  "exclude-tagged",
-  "promotion-candidates",
-  "help"
-]);
-function parseArgs(argv) {
-  const positionals = [];
-  const flags = {};
-  const errors = [];
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i];
-    if (!arg.startsWith("--")) {
-      positionals.push(arg);
-      continue;
-    }
-    const body = arg.slice(2);
-    if (body === "") {
-      errors.push('"--" \u306F\u89E3\u91C8\u3067\u304D\u307E\u305B\u3093\u3002');
-      continue;
-    }
-    const eq = body.indexOf("=");
-    if (eq >= 0) {
-      flags[body.slice(0, eq)] = body.slice(eq + 1);
-      continue;
-    }
-    if (BOOLEAN_FLAGS.has(body)) {
-      flags[body] = true;
-      continue;
-    }
-    const next = argv[i + 1];
-    if (next === void 0 || next.startsWith("--")) {
-      errors.push(`--${body} \u306B\u5024\u304C\u3042\u308A\u307E\u305B\u3093\u3002`);
-      continue;
-    }
-    flags[body] = next;
-    i++;
-  }
-  return { positionals, flags, errors };
-}
-function stringFlag(flags, name) {
-  const value = flags[name];
-  if (value === void 0) return void 0;
-  if (value === true) return void 0;
-  return value;
-}
-function boolFlag(flags, name) {
-  const value = flags[name];
-  if (value === true) return true;
-  if (typeof value === "string") return value !== "false" && value !== "0";
-  return false;
-}
-function intFlag(flags, name) {
-  const raw = flags[name];
-  if (raw === void 0) return { ok: true, value: void 0 };
-  if (raw === true)
-    return { ok: false, message: `--${name} \u306B\u5024\u304C\u3042\u308A\u307E\u305B\u3093\u3002` };
-  if (!/^-?\d+$/.test(raw.trim())) {
-    return {
-      ok: false,
-      message: `--${name} \u306F\u6574\u6570\u3067\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044(\u53D7\u9818: ${JSON.stringify(raw)})\u3002`
-    };
-  }
-  return { ok: true, value: Number.parseInt(raw.trim(), 10) };
-}
-
-// src/cli/output.ts
-var EXIT_REJECTED = 1;
-var EXIT_USAGE = 2;
-var EXIT_SHRINK_PENDING = 3;
-function emitResult(command, payload) {
-  process.stdout.write(`${JSON.stringify({ command, ...payload }, null, 2)}
-`);
-}
-function note(line) {
-  process.stderr.write(`${line}
-`);
-}
-function noteWarnings(warnings) {
-  for (const warning of warnings) note(`warning: ${warning}`);
-}
-function emitReadFailure(command, error, message, extra = {}) {
-  emitResult(command, { ok: false, error, message, ...extra });
-  note(message);
-}
-function emitWriteFailure(command, error, message, extra = {}, exitCode = EXIT_REJECTED) {
-  emitResult(command, { ok: false, error, message, ...extra });
-  note(message);
-  process.exitCode = exitCode;
-}
-var FEATURE_LABEL = {
-  adr: "ADR",
-  gotchas: "GOTCHAS"
-};
-function emitFeatureDisabled(command, feature) {
-  const env = FEATURE_ENV[feature];
-  emitWriteFailure(
-    command,
-    "feature_disabled",
-    `${FEATURE_LABEL[feature]} \u306E\u8A18\u9332\u306F\u7121\u52B9\u3067\u3059\u3002\u6709\u52B9\u306B\u3059\u308B\u306B\u306F\u74B0\u5883\u5909\u6570 ${env} \u3092 1(true / on \u3082\u53EF)\u306B\u3057\u3066\u304F\u3060\u3055\u3044\u3002CLI \u306F\u5B9F\u884C\u6642\u306E\u5024\u3092\u8AAD\u307F\u307E\u3059(\u6CE8\u5165\u306F\u30BB\u30C3\u30B7\u30E7\u30F3\u958B\u59CB\u6642\u306E\u5024\u3092\u4F7F\u3046\u306E\u3067\u3001\u6CE8\u5165\u306B\u53CD\u6620\u3059\u308B\u306B\u306F\u65B0\u3057\u3044\u30BB\u30C3\u30B7\u30E7\u30F3\u304C\u5FC5\u8981\u3067\u3059)\u3002`,
-    { written: false, feature, env },
-    EXIT_REJECTED
-  );
-}
-function messageOf(error) {
-  if (error instanceof Error) return error.message;
-  return String(error);
-}
-
-// src/cli/adr-candidate.ts
-function runScanAdrCandidates(ctx) {
-  const command = "scan-adr-candidates";
-  try {
-    const config = loadConfig(ctx.cwd);
-    const result = scanAdrCandidates(config.docRoot, config.architecturePath);
-    const warnings = [...config.warnings, ...result.warnings];
-    noteWarnings(warnings);
-    emitResult(command, {
-      ok: true,
-      repoRoot: result.repoRoot,
-      candidates: result.candidates,
-      warnings
-    });
-  } catch (error) {
-    emitReadFailure(command, "internal_error", messageOf(error), {
-      candidates: []
-    });
-  }
-}
-function runShrinkAdrCandidate(ctx) {
-  const command = "shrink-adr-candidate";
-  const file = stringFlag(ctx.flags, "file");
-  const candidateId = stringFlag(ctx.flags, "candidate-id");
-  const adr = stringFlag(ctx.flags, "adr");
-  const hash = stringFlag(ctx.flags, "hash");
-  const missing = [];
-  if (file === void 0) missing.push("--file <path>");
-  if (candidateId === void 0) missing.push("--candidate-id <\u5019\u88DC ID>");
-  if (adr === void 0) missing.push("--adr <ADR-NNN>");
-  if (hash === void 0) missing.push("--hash <\u8D70\u67FB\u306E hash>");
-  if (file === void 0 || candidateId === void 0 || adr === void 0 || hash === void 0) {
-    emitWriteFailure(
-      command,
-      "missing_option",
-      `${missing.join(" / ")} \u304C\u5FC5\u8981\u3067\u3059\u3002`,
-      { written: false },
-      EXIT_USAGE
-    );
-    return;
-  }
-  const adrNumber = parseAdrId(adr);
-  if (adrNumber === null) {
-    emitWriteFailure(
-      command,
-      "invalid_option",
-      `--adr \u306F ADR-NNN \u306E\u5F62\u3067\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044(\u53D7\u9818: ${JSON.stringify(adr)})\u3002`,
-      { written: false },
-      EXIT_USAGE
-    );
-    return;
-  }
-  try {
-    const config = loadConfig(ctx.cwd);
-    const result = shrinkAdrCandidate({
-      docRoot: config.docRoot,
-      architecturePath: config.architecturePath,
-      file: path6.resolve(ctx.cwd, file),
-      candidateId,
-      adrNumber,
-      hash
-    });
-    noteWarnings(config.warnings);
-    emitResult(command, {
-      ok: true,
-      written: result.written,
-      alreadyShrunk: !result.written,
-      file: result.file,
-      candidateId: result.candidateId,
-      adr: result.adr,
-      warnings: config.warnings
-    });
-  } catch (error) {
-    emitWriteFailure(
-      command,
-      error instanceof AdrCandidateError ? error.code : "internal_error",
-      messageOf(error),
-      { written: false, shrinkPending: { file, candidateId, adr } },
-      EXIT_SHRINK_PENDING
-    );
-  }
-}
-
 // src/lib/scan.ts
-import { spawnSync as spawnSync3 } from "node:child_process";
-import fs7 from "node:fs";
-import path7 from "node:path";
+import { spawnSync as spawnSync2 } from "node:child_process";
+import fs2 from "node:fs";
+import path2 from "node:path";
 var ARCHITECTURE_SECTIONS = [
   "\u30B7\u30B9\u30C6\u30E0\u6982\u8981",
   "\u6280\u8853\u30B9\u30BF\u30C3\u30AF",
@@ -3256,9 +798,9 @@ var ARCHITECTURE_SECTIONS = [
   "\u30C9\u30E1\u30A4\u30F3\u30DE\u30C3\u30D7",
   "\u30B3\u30DE\u30F3\u30C9\u5B9A\u7FA9",
   "\u4FDD\u8B77\u30D1\u30B9",
-  "\u30C6\u30B9\u30C8\u65B9\u91DD",
-  "ADR \u4E00\u89A7"
+  "\u30C6\u30B9\u30C8\u65B9\u91DD"
 ];
+var LEGACY_ADR_HEADING = "ADR \u4E00\u89A7";
 var EXCLUDED_DIRECTORY_NAMES = /* @__PURE__ */ new Set([
   ".git",
   "node_modules",
@@ -3362,7 +904,7 @@ var DEFAULT_SCAN_LIMITS = {
   maxDocuments: 50,
   maxHeadingsPerDocument: 200
 };
-function isPlainObject3(value) {
+function isPlainObject2(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function compareStrings(a, b) {
@@ -3372,14 +914,14 @@ function compareStrings(a, b) {
 }
 function readTextFile(file) {
   try {
-    return fs7.readFileSync(file, "utf8");
+    return fs2.readFileSync(file, "utf8");
   } catch {
     return null;
   }
 }
 function fileExists(file) {
   try {
-    return fs7.statSync(file).isFile();
+    return fs2.statSync(file).isFile();
   } catch {
     return false;
   }
@@ -3549,7 +1091,7 @@ function gitIgnoredPaths(root) {
   const env = { ...process.env };
   for (const key of GIT_REPOSITORY_ENV_KEYS) delete env[key];
   try {
-    const res = spawnSync3(
+    const res = spawnSync2(
       "git",
       [
         "ls-files",
@@ -3579,7 +1121,7 @@ function isIgnored(ignored, rel, isDirectory) {
   return ignored.has(isDirectory ? `${rel}/` : rel);
 }
 function rootFile(root, ignored, rel) {
-  return ignored.has(rel) ? null : path7.join(root, rel);
+  return ignored.has(rel) ? null : path2.join(root, rel);
 }
 function readRootText(root, ignored, rel) {
   const file = rootFile(root, ignored, rel);
@@ -3617,7 +1159,7 @@ function walkDirectory(state, dir, rel, depth) {
   if (state.truncation.walk) return;
   let dirents;
   try {
-    dirents = fs7.readdirSync(dir, { withFileTypes: true });
+    dirents = fs2.readdirSync(dir, { withFileTypes: true });
   } catch {
     state.unreadable.push(rel === "" ? "." : rel);
     return;
@@ -3635,7 +1177,7 @@ function walkDirectory(state, dir, rel, depth) {
       if (EXCLUDED_DIRECTORY_NAMES.has(dirent.name)) continue;
       if (depth + 1 <= 2) state.dirs.add(childRel);
       pushTree(state, childRel, depth + 1, "directory");
-      walkDirectory(state, path7.join(dir, dirent.name), childRel, depth + 1);
+      walkDirectory(state, path2.join(dir, dirent.name), childRel, depth + 1);
     } else if (dirent.isFile()) {
       recordFile(state, childRel);
       pushTree(state, childRel, depth + 1, "file");
@@ -3697,7 +1239,7 @@ function scanLanguages(root, ignored, packageJson) {
   if (packageJson !== null) {
     const details = {};
     const engines = packageJson.engines;
-    if (isPlainObject3(engines)) {
+    if (isPlainObject2(engines)) {
       for (const [k, v] of Object.entries(engines)) {
         if (typeof v === "string") details[`engines.${k}`] = v;
       }
@@ -3709,9 +1251,9 @@ function scanLanguages(root, ignored, packageJson) {
   if (tsconfigPath !== null && fileExists(tsconfigPath)) {
     const details = {};
     const parsed = readJsoncFile(tsconfigPath);
-    if (isPlainObject3(parsed)) {
+    if (isPlainObject2(parsed)) {
       const options = parsed.compilerOptions;
-      if (isPlainObject3(options)) {
+      if (isPlainObject2(options)) {
         for (const key of ["target", "module", "moduleResolution", "strict"]) {
           const value = options[key];
           if (typeof value === "string" || typeof value === "boolean") {
@@ -3754,7 +1296,7 @@ function scanLanguages(root, ignored, packageJson) {
   return out;
 }
 function toDependencyEntries(raw) {
-  if (!isPlainObject3(raw)) return [];
+  if (!isPlainObject2(raw)) return [];
   const out = [];
   for (const [name, version] of Object.entries(raw)) {
     out.push({ name, version: typeof version === "string" ? version : "" });
@@ -3781,7 +1323,7 @@ function classifyScript(name) {
 }
 function scanScripts(packageJson, packageManager) {
   const raw = packageJson?.scripts;
-  if (!isPlainObject3(raw)) return { scripts: [], commands: [] };
+  if (!isPlainObject2(raw)) return { scripts: [], commands: [] };
   const scripts = [];
   for (const [name, command] of Object.entries(raw)) {
     if (typeof command !== "string") continue;
@@ -3885,7 +1427,7 @@ function collectMarkdownFiles(dir, rel, depth, maxDepth, out, limit, ignored) {
   if (depth > maxDepth || out.length >= limit) return;
   let dirents;
   try {
-    dirents = fs7.readdirSync(dir, { withFileTypes: true });
+    dirents = fs2.readdirSync(dir, { withFileTypes: true });
   } catch {
     return;
   }
@@ -3897,7 +1439,7 @@ function collectMarkdownFiles(dir, rel, depth, maxDepth, out, limit, ignored) {
     if (dirent.isDirectory()) {
       if (EXCLUDED_DIRECTORY_NAMES.has(dirent.name)) continue;
       collectMarkdownFiles(
-        path7.join(dir, dirent.name),
+        path2.join(dir, dirent.name),
         childRel,
         depth + 1,
         maxDepth,
@@ -3914,7 +1456,7 @@ function scanDocuments(root, limits, truncation, ignored) {
   const targets = [];
   let rootEntries = [];
   try {
-    rootEntries = fs7.readdirSync(root, { withFileTypes: true });
+    rootEntries = fs2.readdirSync(root, { withFileTypes: true });
   } catch {
     rootEntries = [];
   }
@@ -3925,7 +1467,7 @@ function scanDocuments(root, limits, truncation, ignored) {
     if (lower === "readme.md" || lower === "claude.md")
       targets.push(dirent.name);
   }
-  const docsDir = path7.join(root, "docs");
+  const docsDir = path2.join(root, "docs");
   const docsFiles = [];
   if (!isIgnored(ignored, "docs", true)) {
     collectMarkdownFiles(
@@ -3945,7 +1487,7 @@ function scanDocuments(root, limits, truncation, ignored) {
       truncation.documents = true;
       break;
     }
-    const text = readTextFile(path7.join(root, rel));
+    const text = readTextFile(path2.join(root, rel));
     if (text === null) continue;
     const { headings, truncated } = extractHeadings(
       text,
@@ -3957,7 +1499,7 @@ function scanDocuments(root, limits, truncation, ignored) {
 }
 function scanInner(startDir, options) {
   const limits = { ...DEFAULT_SCAN_LIMITS, ...options.limits };
-  const root = options.root !== void 0 ? path7.resolve(options.root) : findDocRoot(startDir);
+  const root = options.root !== void 0 ? path2.resolve(options.root) : findDocRoot(startDir);
   const warnings = [];
   const truncation = {
     walk: false,
@@ -3993,7 +1535,7 @@ function scanInner(startDir, options) {
   const packageJsonPath = rootFile(root, state.ignored, "package.json");
   const packageJsonRaw = packageJsonPath === null ? null : readJsonFile(packageJsonPath);
   const packageJsonExists = packageJsonPath !== null && fileExists(packageJsonPath);
-  const packageJson = isPlainObject3(packageJsonRaw) ? packageJsonRaw : null;
+  const packageJson = isPlainObject2(packageJsonRaw) ? packageJsonRaw : null;
   if (packageJsonExists && packageJson === null) {
     warnings.push(
       "package.json \u3092 JSON \u3068\u3057\u3066\u8AAD\u3081\u306A\u304B\u3063\u305F\u305F\u3081\u3001\u4F9D\u5B58\u3068\u30B3\u30DE\u30F3\u30C9\u3092\u53CE\u96C6\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F\u3002"
@@ -4065,7 +1607,7 @@ function scan(startDir, options = {}) {
   } catch (error) {
     let root;
     try {
-      root = options.root ?? path7.resolve(startDir ?? process.cwd());
+      root = options.root ?? path2.resolve(startDir ?? process.cwd());
     } catch {
       root = options.root ?? startDir ?? ".";
     }
@@ -4108,6 +1650,7 @@ function scan(startDir, options = {}) {
 }
 var FINDING_ORDER = {
   section_missing: 0,
+  legacy_section: 1,
   domain_gap: 7,
   domain_dead_glob: 8
 };
@@ -4123,7 +1666,7 @@ function normalizeSections(sections) {
     }
     return map;
   }
-  if (isPlainObject3(sections)) {
+  if (isPlainObject2(sections)) {
     for (const [heading, body] of Object.entries(sections)) {
       const key = heading.trim();
       if (key === "") continue;
@@ -4196,14 +1739,14 @@ function pathStateFromRoot(root, relative) {
   for (const segment of relative.split("/")) {
     let names;
     try {
-      names = fs7.readdirSync(current);
+      names = fs2.readdirSync(current);
     } catch {
       return "missing";
     }
     if (!names.includes(segment)) return "missing";
-    current = path7.join(current, segment);
+    current = path2.join(current, segment);
     try {
-      if (fs7.lstatSync(current).isSymbolicLink()) return "link";
+      if (fs2.lstatSync(current).isSymbolicLink()) return "link";
     } catch {
       return "missing";
     }
@@ -4326,13 +1869,20 @@ function diffArchitectureInner(input) {
   const sections = normalizeSections(input.sections);
   const exists = input.architectureExists ?? sections.size > 0;
   for (const heading of ARCHITECTURE_SECTIONS) {
-    if (heading === "ADR \u4E00\u89A7" && input.adrEnabled === false) continue;
     if (exists && sections.has(heading)) continue;
     findings.push({
       kind: "section_missing",
       section: heading,
       subject: heading,
       detail: exists ? `## ${heading} \u304C ARCHITECTURE \u306B\u3042\u308A\u307E\u305B\u3093\u3002` : `ARCHITECTURE \u304C\u7121\u3044\u305F\u3081 ## ${heading} \u3082\u3042\u308A\u307E\u305B\u3093\u3002`
+    });
+  }
+  if (exists && sections.has(LEGACY_ADR_HEADING)) {
+    findings.push({
+      kind: "legacy_section",
+      section: LEGACY_ADR_HEADING,
+      subject: LEGACY_ADR_HEADING,
+      detail: `## ${LEGACY_ADR_HEADING} \u304C\u6B8B\u3063\u3066\u3044\u307E\u3059\u3002metatron \u306F ADR \u6A5F\u80FD\u3092\u5EC3\u6B62\u3057\u305F\u305F\u3081\u3001\u3053\u306E\u30BB\u30AF\u30B7\u30E7\u30F3\u3092\u7BA1\u7406\u3057\u307E\u305B\u3093\u3002\u672C\u6587\u3092\u6B8B\u3059\u306A\u3089\u5225\u306E\u30D5\u30A1\u30A4\u30EB\u3078\u5199\u3057\u3066\u304B\u3089\u3001stage-architecture \u306E { "heading": "${LEGACY_ADR_HEADING}", "remove": true } \u3067\u524A\u9664\u3067\u304D\u307E\u3059\u3002`
     });
   }
   const sources = collectSources(input.scan, skipped);
@@ -4343,9 +1893,6 @@ function diffArchitectureInner(input) {
   diffDomains(input.scan, input.domains, findings, skipped);
   skipped.push(
     "\u4FDD\u8B77\u30D1\u30B9\u306E\u4E0D\u6574\u5408: Raguel \u306E\u8A2D\u5B9A\u306E\u89E3\u6790\u3092\u4F34\u3046\u305F\u3081\u3001\u3053\u306E\u95A2\u6570\u3067\u306F\u691C\u51FA\u3057\u307E\u305B\u3093\u3002"
-  );
-  skipped.push(
-    "ADR \u306E\u72B6\u614B\u306E\u9673\u8150\u5316: ADR \u306E\u89E3\u6790(adr.ts)\u3092\u4F34\u3046\u305F\u3081\u3001\u3053\u306E\u95A2\u6570\u3067\u306F\u691C\u51FA\u3057\u307E\u305B\u3093\u3002"
   );
   findings.sort(
     (a, b) => FINDING_ORDER[a.kind] - FINDING_ORDER[b.kind] || compareStrings(a.subject, b.subject)
@@ -4367,11 +1914,440 @@ function diffArchitecture(input) {
 }
 
 // src/cli/input.ts
-import fs8 from "node:fs";
+import fs5 from "node:fs";
+
+// src/lib/staging.ts
+import crypto2 from "node:crypto";
+import fs4 from "node:fs";
+import os from "node:os";
+import path4 from "node:path";
+
+// src/lib/atomic-write.ts
+import crypto from "node:crypto";
+import fs3 from "node:fs";
+import path3 from "node:path";
+var MAX_LINK_HOPS = 40;
+function errnoCode(error) {
+  return error?.code;
+}
+function resolveWriteTarget(target) {
+  try {
+    return fs3.realpathSync(target);
+  } catch (error) {
+    if (errnoCode(error) !== "ENOENT") throw error;
+  }
+  let current = path3.resolve(target);
+  for (let hop = 0; hop < MAX_LINK_HOPS; hop++) {
+    let link;
+    try {
+      link = fs3.readlinkSync(current);
+    } catch (error) {
+      const code = errnoCode(error);
+      if (code === "ENOENT" || code === "EINVAL") return current;
+      throw error;
+    }
+    current = path3.resolve(path3.dirname(current), link);
+  }
+  const err = new Error(
+    `ELOOP: too many symbolic links encountered, '${target}'`
+  );
+  err.code = "ELOOP";
+  throw err;
+}
+function existingMode(filePath) {
+  try {
+    return fs3.statSync(filePath).mode & 4095;
+  } catch (error) {
+    if (errnoCode(error) === "ENOENT") return null;
+    throw error;
+  }
+}
+function writeFileAtomic(target, data) {
+  const dest = resolveWriteTarget(target);
+  fs3.mkdirSync(path3.dirname(dest), { recursive: true });
+  const mode = existingMode(dest);
+  const tmp = `${dest}.tmp-${crypto.randomUUID()}`;
+  try {
+    fs3.writeFileSync(tmp, data);
+    if (mode !== null) fs3.chmodSync(tmp, mode);
+    fs3.renameSync(tmp, dest);
+  } catch (error) {
+    try {
+      fs3.rmSync(tmp, { force: true });
+    } catch {
+    }
+    throw error;
+  }
+}
+
+// src/lib/staging.ts
+var STAGING_DIR_NAME = "metatron-staging";
+var STAGING_RECORD_VERSION = 2;
+var DEFAULT_STAGING_TTL_MS = 30 * 60 * 1e3;
+function hashBuffer(buf) {
+  return crypto2.createHash("sha256").update(buf).digest("hex");
+}
+function hashContent(content) {
+  const buf = Buffer.isBuffer(content) ? content : Buffer.from(content, "utf8");
+  return hashBuffer(buf);
+}
+function hashFileOrNull(filePath) {
+  try {
+    return hashBuffer(fs4.readFileSync(filePath));
+  } catch {
+    return null;
+  }
+}
+function projectKey(projectRoot) {
+  let resolved;
+  try {
+    resolved = path4.resolve(projectRoot);
+  } catch {
+    resolved = projectRoot;
+  }
+  let real = resolved;
+  try {
+    real = fs4.realpathSync(resolved);
+  } catch {
+  }
+  return hashContent(real.split(path4.sep).join("/")).slice(0, 16);
+}
+function stagingRootDir() {
+  return path4.join(os.tmpdir(), STAGING_DIR_NAME);
+}
+function stagingDirFor(projectRoot) {
+  return path4.join(stagingRootDir(), projectKey(projectRoot));
+}
+var STAGING_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
+function isSafeStagingId(stagingId) {
+  return typeof stagingId === "string" && STAGING_ID_PATTERN.test(stagingId);
+}
+function stagingRecordPath(projectRoot, stagingId) {
+  if (!isSafeStagingId(stagingId)) return null;
+  return path4.join(stagingDirFor(projectRoot), `${stagingId}.json`);
+}
+function isInside(root, target) {
+  const rel = path4.relative(root, target);
+  if (rel === "" || rel === "..") return false;
+  return !rel.startsWith(`..${path4.sep}`) && !path4.isAbsolute(rel);
+}
+function isPlainObject3(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function isStagingKind(value) {
+  return value === "architecture";
+}
+function canonicalize(value) {
+  if (Array.isArray(value)) return value.map(canonicalize);
+  if (isPlainObject3(value)) {
+    const out = {};
+    for (const key of Object.keys(value).sort()) {
+      const canonical = canonicalize(value[key]);
+      if (canonical !== void 0) out[key] = canonical;
+    }
+    return out;
+  }
+  return value;
+}
+function computeRecordHash(record) {
+  const { recordHash: _ignored, ...rest } = record;
+  const roundTripped = JSON.parse(JSON.stringify(rest));
+  return hashContent(JSON.stringify(canonicalize(roundTripped)));
+}
+function verifyRecordHash(record) {
+  return record.recordHash === computeRecordHash(record);
+}
+function tamperedReason(stagingId) {
+  return `staging ${stagingId} \u306E\u5185\u5BB9\u304C stage \u6642\u304B\u3089\u5909\u5316\u3057\u3066\u3044\u307E\u3059(recordHash \u4E0D\u4E00\u81F4)\u3002\u627F\u8A8D\u3055\u308C\u305F diff \u3068\u4E00\u81F4\u3057\u306A\u3044\u305F\u3081\u66F8\u304D\u8FBC\u307F\u307E\u305B\u3093\u3002stage \u304B\u3089\u3084\u308A\u76F4\u3057\u3066\u304F\u3060\u3055\u3044\u3002`;
+}
+function parseRecord(raw, stagingId) {
+  if (!isPlainObject3(raw)) return null;
+  if (raw.stagingId !== stagingId) return null;
+  if (typeof raw.version !== "number") return null;
+  if (!isStagingKind(raw.kind)) return null;
+  if (typeof raw.targetPath !== "string" || raw.targetPath === "") return null;
+  if (typeof raw.nextContent !== "string") return null;
+  if (raw.baseHash !== null && typeof raw.baseHash !== "string") return null;
+  if (typeof raw.createdAt !== "number") return null;
+  if (typeof raw.expiresAt !== "number") return null;
+  if (raw.usedAt !== null && typeof raw.usedAt !== "number") return null;
+  return {
+    version: raw.version,
+    stagingId,
+    kind: raw.kind,
+    targetPath: raw.targetPath,
+    baseHash: raw.baseHash,
+    nextContent: raw.nextContent,
+    createdAt: raw.createdAt,
+    expiresAt: raw.expiresAt,
+    usedAt: raw.usedAt,
+    meta: isPlainObject3(raw.meta) ? raw.meta : {},
+    // 欄ごと消された場合は空文字にする。sha256 の hex とは決して一致しないため、
+    // 「レコードとしては読めたが整合していない」= tampered に落ちる。
+    recordHash: typeof raw.recordHash === "string" ? raw.recordHash : ""
+  };
+}
+function loadRecord(projectRoot, stagingId) {
+  const recordPath = stagingRecordPath(projectRoot, stagingId);
+  if (recordPath === null) return null;
+  try {
+    const text = fs4.readFileSync(recordPath, "utf8");
+    return parseRecord(JSON.parse(text), stagingId);
+  } catch {
+    return null;
+  }
+}
+function writeRecord(recordPath, record) {
+  const dir = path4.dirname(recordPath);
+  fs4.mkdirSync(dir, { recursive: true });
+  const tmpPath = `${recordPath}.tmp-${crypto2.randomUUID()}`;
+  const body = `${JSON.stringify(record, null, 2)}
+`;
+  fs4.writeFileSync(tmpPath, body, { encoding: "utf8", mode: 384 });
+  try {
+    fs4.renameSync(tmpPath, recordPath);
+  } catch (err) {
+    try {
+      fs4.rmSync(tmpPath, { force: true });
+    } catch {
+    }
+    throw err;
+  }
+}
+function createStaging(input) {
+  const errors = input.validationErrors ?? [];
+  if (errors.length > 0) {
+    return { ok: false, error: "invalid", reasons: [...errors] };
+  }
+  const projectRoot = path4.resolve(input.projectRoot);
+  const targetPath = path4.resolve(projectRoot, input.targetPath);
+  if (!isInside(projectRoot, targetPath)) {
+    return {
+      ok: false,
+      error: "invalid",
+      reasons: [
+        `\u66F8\u304D\u8FBC\u307F\u5BFE\u8C61 ${targetPath} \u304C\u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u30EB\u30FC\u30C8 ${projectRoot} \u306E\u5916\u3092\u6307\u3057\u3066\u3044\u307E\u3059\u3002`
+      ]
+    };
+  }
+  const now = input.now ?? Date.now();
+  const ttlMs = typeof input.ttlMs === "number" && Number.isFinite(input.ttlMs) && input.ttlMs > 0 ? input.ttlMs : DEFAULT_STAGING_TTL_MS;
+  const baseHash = input.baseHash === void 0 ? hashFileOrNull(targetPath) : input.baseHash;
+  const stagingId = crypto2.randomUUID();
+  const draft = {
+    version: STAGING_RECORD_VERSION,
+    stagingId,
+    kind: input.kind,
+    targetPath,
+    baseHash,
+    nextContent: input.nextContent,
+    createdAt: now,
+    expiresAt: now + ttlMs,
+    usedAt: null,
+    meta: input.meta ?? {}
+  };
+  const recordPath = path4.join(stagingDirFor(projectRoot), `${stagingId}.json`);
+  try {
+    writeRecord(recordPath, { ...draft, recordHash: computeRecordHash(draft) });
+  } catch (err) {
+    return {
+      ok: false,
+      error: "staging_unavailable",
+      reasons: [`staging \u3092\u4FDD\u5B58\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F(${recordPath}): ${String(err)}`]
+    };
+  }
+  return {
+    ok: true,
+    stagingId,
+    recordPath,
+    targetPath,
+    baseHash,
+    createdAt: draft.createdAt,
+    expiresAt: draft.expiresAt
+  };
+}
+function readStaging(projectRoot, stagingId) {
+  const record = loadRecord(projectRoot, stagingId);
+  if (record === null) {
+    return {
+      ok: false,
+      error: "unknown_id",
+      reason: `staging ${stagingId} \u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093\u3002stage \u304B\u3089\u3084\u308A\u76F4\u3057\u3066\u304F\u3060\u3055\u3044\u3002`
+    };
+  }
+  if (!verifyRecordHash(record)) {
+    return {
+      ok: false,
+      error: "tampered",
+      reason: tamperedReason(record.stagingId)
+    };
+  }
+  return { ok: true, record };
+}
+function commitStaging(input) {
+  const projectRoot = path4.resolve(input.projectRoot);
+  const now = input.now ?? Date.now();
+  const record = loadRecord(projectRoot, input.stagingId);
+  if (record === null) {
+    return {
+      ok: false,
+      error: "unknown_id",
+      reason: `staging ${input.stagingId} \u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093\u3002stage \u304B\u3089\u3084\u308A\u76F4\u3057\u3066\u304F\u3060\u3055\u3044\u3002`
+    };
+  }
+  if (!verifyRecordHash(record)) {
+    return {
+      ok: false,
+      error: "tampered",
+      reason: tamperedReason(record.stagingId)
+    };
+  }
+  if (record.usedAt !== null) {
+    return {
+      ok: false,
+      error: "already_used",
+      reason: `staging ${record.stagingId} \u306F\u65E2\u306B\u4F7F\u7528\u6E08\u307F\u3067\u3059(${new Date(record.usedAt).toISOString()})\u3002stage \u304B\u3089\u3084\u308A\u76F4\u3057\u3066\u304F\u3060\u3055\u3044\u3002`
+    };
+  }
+  if (now >= record.expiresAt) {
+    return {
+      ok: false,
+      error: "expired",
+      reason: `staging ${record.stagingId} \u306F\u6709\u52B9\u671F\u9650(${new Date(record.expiresAt).toISOString()})\u3092\u904E\u304E\u3066\u3044\u307E\u3059\u3002stage \u304B\u3089\u3084\u308A\u76F4\u3057\u3066\u304F\u3060\u3055\u3044\u3002`
+    };
+  }
+  if (!isInside(projectRoot, record.targetPath)) {
+    return {
+      ok: false,
+      error: "unknown_id",
+      reason: `staging ${record.stagingId} \u306E\u66F8\u304D\u8FBC\u307F\u5148\u304C\u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u30EB\u30FC\u30C8\u306E\u5916\u3092\u6307\u3057\u3066\u3044\u307E\u3059\u3002stage \u304B\u3089\u3084\u308A\u76F4\u3057\u3066\u304F\u3060\u3055\u3044\u3002`
+    };
+  }
+  const currentHash = hashFileOrNull(record.targetPath);
+  if (currentHash !== record.baseHash) {
+    const before = record.baseHash === null ? "\u672A\u4F5C\u6210" : record.baseHash;
+    const after = currentHash === null ? "\u672A\u4F5C\u6210" : currentHash;
+    return {
+      ok: false,
+      error: "file_changed",
+      reason: `${record.targetPath} \u304C stage \u5F8C\u306B\u5909\u5316\u3057\u3066\u3044\u307E\u3059(${before} \u2192 ${after})\u3002stage \u304B\u3089\u3084\u308A\u76F4\u3057\u3066\u304F\u3060\u3055\u3044\u3002`
+    };
+  }
+  const recordPath = stagingRecordPath(projectRoot, record.stagingId);
+  if (recordPath === null) {
+    return {
+      ok: false,
+      error: "unknown_id",
+      reason: `staging ${record.stagingId} \u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093\u3002stage \u304B\u3089\u3084\u308A\u76F4\u3057\u3066\u304F\u3060\u3055\u3044\u3002`
+    };
+  }
+  try {
+    const used = { ...record, usedAt: now };
+    writeRecord(recordPath, { ...used, recordHash: computeRecordHash(used) });
+  } catch (err) {
+    return {
+      ok: false,
+      error: "staging_unavailable",
+      reason: `staging ${record.stagingId} \u3092\u4F7F\u7528\u6E08\u307F\u306B\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F(${recordPath}): ${String(err)}\u3002\u5358\u56DE\u4F7F\u7528\u3092\u4FDD\u8A3C\u3067\u304D\u306A\u3044\u305F\u3081\u66F8\u304D\u8FBC\u307F\u307E\u305B\u3093\u3002${record.targetPath} \u306F\u5909\u66F4\u3057\u3066\u3044\u307E\u305B\u3093\u3002`
+    };
+  }
+  const buf = Buffer.from(record.nextContent, "utf8");
+  try {
+    writeFileAtomic(record.targetPath, buf);
+  } catch (err) {
+    return {
+      ok: false,
+      error: "write_failed",
+      reason: `${record.targetPath} \u3078\u66F8\u304D\u8FBC\u3081\u307E\u305B\u3093\u3067\u3057\u305F: ${String(err)}\u3002\u3053\u306E staging \u306F\u6D88\u8CBB\u6E08\u307F\u306B\u306A\u3063\u305F\u305F\u3081\u3001stage \u304B\u3089\u3084\u308A\u76F4\u3057\u3066\u304F\u3060\u3055\u3044\u3002`
+    };
+  }
+  return {
+    ok: true,
+    stagingId: record.stagingId,
+    kind: record.kind,
+    path: record.targetPath,
+    bytesWritten: buf.byteLength,
+    meta: record.meta,
+    warnings: []
+  };
+}
+
+// src/cli/args.ts
+var BOOLEAN_FLAGS = /* @__PURE__ */ new Set(["help"]);
+function parseArgs(argv) {
+  const positionals = [];
+  const flags = {};
+  const errors = [];
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (!arg.startsWith("--")) {
+      positionals.push(arg);
+      continue;
+    }
+    const body = arg.slice(2);
+    if (body === "") {
+      errors.push('"--" \u306F\u89E3\u91C8\u3067\u304D\u307E\u305B\u3093\u3002');
+      continue;
+    }
+    const eq = body.indexOf("=");
+    if (eq >= 0) {
+      flags[body.slice(0, eq)] = body.slice(eq + 1);
+      continue;
+    }
+    if (BOOLEAN_FLAGS.has(body)) {
+      flags[body] = true;
+      continue;
+    }
+    const next = argv[i + 1];
+    if (next === void 0 || next.startsWith("--")) {
+      errors.push(`--${body} \u306B\u5024\u304C\u3042\u308A\u307E\u305B\u3093\u3002`);
+      continue;
+    }
+    flags[body] = next;
+    i++;
+  }
+  return { positionals, flags, errors };
+}
+function stringFlag(flags, name) {
+  const value = flags[name];
+  if (value === void 0) return void 0;
+  if (value === true) return void 0;
+  return value;
+}
+
+// src/cli/output.ts
+var EXIT_REJECTED = 1;
+var EXIT_USAGE = 2;
+function emitResult(command, payload) {
+  process.stdout.write(`${JSON.stringify({ command, ...payload }, null, 2)}
+`);
+}
+function note(line) {
+  process.stderr.write(`${line}
+`);
+}
+function noteWarnings(warnings) {
+  for (const warning of warnings) note(`warning: ${warning}`);
+}
+function emitReadFailure(command, error, message, extra = {}) {
+  emitResult(command, { ok: false, error, message, ...extra });
+  note(message);
+}
+function emitWriteFailure(command, error, message, extra = {}, exitCode = EXIT_REJECTED) {
+  emitResult(command, { ok: false, error, message, ...extra });
+  note(message);
+  process.exitCode = exitCode;
+}
+function messageOf(error) {
+  if (error instanceof Error) return error.message;
+  return String(error);
+}
+
+// src/cli/input.ts
 function readStdinSync() {
   if (process.stdin.isTTY === true) return null;
   try {
-    return fs8.readFileSync(0, "utf8");
+    return fs5.readFileSync(0, "utf8");
   } catch {
     return null;
   }
@@ -4383,7 +2359,7 @@ function loadInputJson(flags) {
   if (inputPath !== void 0) {
     source = inputPath;
     try {
-      raw = fs8.readFileSync(inputPath, "utf8");
+      raw = fs5.readFileSync(inputPath, "utf8");
     } catch (error) {
       return {
         ok: false,
@@ -4418,7 +2394,7 @@ function isPlainObject4(value) {
 }
 function readDocument(filePath) {
   try {
-    const buf = fs8.readFileSync(filePath);
+    const buf = fs5.readFileSync(filePath);
     return {
       path: filePath,
       exists: true,
@@ -4462,8 +2438,7 @@ function runDiffArchitecture(ctx) {
       scan: scanned,
       sections,
       architectureExists: file.exists,
-      domains: domains.ok ? domains.domains : null,
-      adrEnabled: ctx.features.adr
+      domains: domains.ok ? domains.domains : null
     });
     const warnings = [
       ...config.warnings,
@@ -4498,15 +2473,15 @@ function runDiffArchitecture(ctx) {
 }
 
 // src/cli/claude-md.ts
-import fs10 from "node:fs";
+import fs7 from "node:fs";
 
 // src/lib/claude-md.ts
-import fs9 from "node:fs";
-import path8 from "node:path";
+import fs6 from "node:fs";
+import path5 from "node:path";
 var CLAUDE_MD_CANDIDATES = ["CLAUDE.md", ".claude/CLAUDE.md"];
 function readOrNull(filePath) {
   try {
-    return fs9.readFileSync(filePath, "utf8");
+    return fs6.readFileSync(filePath, "utf8");
   } catch {
     return null;
   }
@@ -4519,7 +2494,7 @@ function isMentionablePath(rel) {
 }
 function mentions(text) {
   const found = /* @__PURE__ */ new Set();
-  const withoutComments = text.replace(/^\uFEFF/, "").replace(/<!--[\s\S]*?-->/g, " ");
+  const withoutComments = text.replace(/^\uFEFF/, "").replace(/`[^`\n]*`|<!--[\s\S]*?-->/g, (m) => m[0] === "`" ? m : " ");
   let fence = null;
   for (const line of withoutComments.split(/\r?\n/)) {
     const marker = /^\s*(`{3,}|~{3,})/.exec(line);
@@ -4527,14 +2502,15 @@ function mentions(text) {
       const char = marker[1][0];
       const length = marker[1].length;
       if (fence === null) fence = { char, length };
-      else if (char === fence.char && length >= fence.length) fence = null;
+      else if (char === fence.char && length >= fence.length && line.trim() === marker[1])
+        fence = null;
       continue;
     }
     if (fence !== null) continue;
     const outsideCode = line.replace(/`[^`]*`/g, " ");
     for (const match of outsideCode.matchAll(/(?:^|\s)@(\S+)/g)) {
       const token = match[1].replace(/[.,;:)\]、。」]+$/, "");
-      if (token !== "") found.add(path8.posix.normalize(token));
+      if (token !== "") found.add(path5.posix.normalize(token));
     }
   }
   return found;
@@ -4542,11 +2518,11 @@ function mentions(text) {
 function existingMentions(docRoot) {
   const existing = /* @__PURE__ */ new Set();
   for (const rel of CLAUDE_MD_CANDIDATES) {
-    const text = readOrNull(path8.join(docRoot, rel));
+    const text = readOrNull(path5.join(docRoot, rel));
     if (text === null) continue;
     for (const m of mentions(text)) {
       existing.add(
-        rel === "CLAUDE.md" ? m : path8.posix.normalize(`.claude/${m}`)
+        rel === "CLAUDE.md" ? m : path5.posix.normalize(`.claude/${m}`)
       );
     }
   }
@@ -4559,10 +2535,10 @@ function linkClaudeMd(docRoot, relatives) {
       `\u7A7A\u767D\u304B\u5236\u5FA1\u6587\u5B57\u3092\u542B\u3080\u30D1\u30B9\u306F @\u30E1\u30F3\u30B7\u30E7\u30F3\u306B\u3067\u304D\u307E\u305B\u3093: ${JSON.stringify(unsafe)}`
     );
   }
-  const rootText = readOrNull(path8.join(docRoot, "CLAUDE.md"));
-  const dotText = readOrNull(path8.join(docRoot, ".claude/CLAUDE.md"));
+  const rootText = readOrNull(path5.join(docRoot, "CLAUDE.md"));
+  const dotText = readOrNull(path5.join(docRoot, ".claude/CLAUDE.md"));
   const useDot = rootText === null && dotText !== null;
-  const target = path8.join(docRoot, useDot ? ".claude/CLAUDE.md" : "CLAUDE.md");
+  const target = path5.join(docRoot, useDot ? ".claude/CLAUDE.md" : "CLAUDE.md");
   const created = (useDot ? dotText : rootText) === null;
   const current = (useDot ? dotText : rootText) ?? "";
   const existing = existingMentions(docRoot);
@@ -4582,7 +2558,7 @@ function linkClaudeMd(docRoot, relatives) {
 // src/cli/claude-md.ts
 function hasContent(filePath) {
   try {
-    return fs10.readFileSync(filePath, "utf8").trim() !== "";
+    return fs7.readFileSync(filePath, "utf8").trim() !== "";
   } catch {
     return false;
   }
@@ -4599,39 +2575,147 @@ function runLinkClaudeMd(ctx) {
     );
     return;
   }
-  const candidates = [
-    config.architectureRelative,
-    ...ctx.features.gotchas && hasContent(config.gotchasPath) ? [config.gotchasRelative] : []
-  ];
+  const candidates = [config.architectureRelative];
   const relatives = candidates.filter(isMentionablePath);
   const skipped = candidates.filter((rel) => !isMentionablePath(rel));
   let configCreated = false;
+  let result;
   try {
     configCreated = createConfigIfMissing(config.configPath);
-    const result = linkClaudeMd(config.docRoot, relatives);
-    emitResult(command, {
-      ok: true,
-      written: result.added.length > 0 || configCreated,
-      ...result,
-      skipped,
-      configPath: config.configPath,
-      configCreated,
-      warnings: config.warnings
-    });
+    result = linkClaudeMd(config.docRoot, relatives);
   } catch (error) {
+    let configRemoveError;
+    if (configCreated) {
+      try {
+        fs7.rmSync(config.configPath, { force: true });
+        configCreated = false;
+      } catch (removeError) {
+        configRemoveError = messageOf(removeError);
+      }
+    }
     emitWriteFailure(command, "write_failed", messageOf(error), {
       written: configCreated,
-      configCreated
+      configCreated,
+      ...configRemoveError === void 0 ? {} : {
+        configRemoveFailed: true,
+        configRemoveError: `\u4F5C\u3063\u305F\u8A2D\u5B9A\u30D5\u30A1\u30A4\u30EB ${config.configPath} \u3092\u6D88\u305B\u307E\u305B\u3093\u3067\u3057\u305F: ${configRemoveError}`
+      }
     });
+    return;
   }
+  emitResult(command, {
+    ok: true,
+    written: result.added.length > 0 || configCreated,
+    ...result,
+    skipped,
+    configPath: config.configPath,
+    configCreated,
+    warnings: config.warnings
+  });
 }
 function createConfigIfMissing(configPath) {
+  let fd;
   try {
-    fs10.writeFileSync(configPath, '{\n  "version": 1\n}\n', { flag: "wx" });
-    return true;
+    fd = fs7.openSync(configPath, "wx");
   } catch (error) {
     if (error.code === "EEXIST") return false;
     throw error;
+  }
+  try {
+    fs7.writeFileSync(fd, '{\n  "version": 1\n}\n');
+  } catch (error) {
+    fs7.closeSync(fd);
+    fs7.rmSync(configPath, { force: true });
+    throw error;
+  }
+  fs7.closeSync(fd);
+  return true;
+}
+
+// src/lib/file-lock.ts
+import fs8 from "node:fs";
+import path6 from "node:path";
+var LOCK_RETRY_INTERVAL_MS = 50;
+var LOCK_MAX_RETRIES = 20;
+var LOCK_STALE_MS = 6e4;
+var FileLockError = class extends Error {
+  code = "lock_timeout";
+  constructor(message) {
+    super(message);
+    this.name = "FileLockError";
+  }
+};
+function lockPathFor(targetPath) {
+  return `${targetPath}.lock`;
+}
+function sleepSync(ms) {
+  const shared = new Int32Array(new SharedArrayBuffer(4));
+  Atomics.wait(shared, 0, 0, ms);
+}
+function errnoCode2(error) {
+  return error?.code;
+}
+function tryCreateLock(lockPath) {
+  try {
+    const fd = fs8.openSync(lockPath, "wx");
+    try {
+      fs8.writeSync(fd, `${process.pid} ${(/* @__PURE__ */ new Date()).toISOString()}
+`);
+    } finally {
+      fs8.closeSync(fd);
+    }
+    return true;
+  } catch (error) {
+    if (errnoCode2(error) === "EEXIST") return false;
+    throw error;
+  }
+}
+function statMtimeMs(lockPath) {
+  try {
+    return fs8.statSync(lockPath).mtimeMs;
+  } catch {
+    return null;
+  }
+}
+function tryStealStaleLock(lockPath) {
+  const mtimeMs = statMtimeMs(lockPath);
+  if (mtimeMs === null) return tryCreateLock(lockPath);
+  if (Date.now() - mtimeMs <= LOCK_STALE_MS) return false;
+  try {
+    fs8.unlinkSync(lockPath);
+  } catch (error) {
+    if (errnoCode2(error) !== "ENOENT") return false;
+  }
+  return tryCreateLock(lockPath);
+}
+function withFileLock(targetPath, fn) {
+  const lockPath = lockPathFor(targetPath);
+  try {
+    fs8.mkdirSync(path6.dirname(lockPath), { recursive: true });
+  } catch {
+  }
+  let acquired = tryCreateLock(lockPath);
+  for (let attempt = 0; !acquired && attempt < LOCK_MAX_RETRIES; attempt++) {
+    const mtimeMs = statMtimeMs(lockPath);
+    if (mtimeMs !== null && Date.now() - mtimeMs > LOCK_STALE_MS) {
+      acquired = tryStealStaleLock(lockPath);
+      if (acquired) break;
+    }
+    sleepSync(LOCK_RETRY_INTERVAL_MS);
+    acquired = tryCreateLock(lockPath);
+  }
+  if (!acquired) {
+    throw new FileLockError(
+      `${lockPath} \u306E\u30ED\u30C3\u30AF\u3092\u53D6\u5F97\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F\u3002\u4ED6\u306E\u30D7\u30ED\u30BB\u30B9\u304C\u66F8\u304D\u8FBC\u307F\u4E2D\u306E\u53EF\u80FD\u6027\u304C\u3042\u308A\u307E\u3059\u3002`
+    );
+  }
+  try {
+    return fn();
+  } finally {
+    try {
+      fs8.rmSync(lockPath, { force: true });
+    } catch {
+    }
   }
 }
 
@@ -4658,24 +2742,6 @@ function runCommit(ctx, spec) {
     });
     return;
   }
-  if (!spec.acceptedKinds.includes(found.record.kind)) {
-    emitWriteFailure(
-      command,
-      "staging_kind_mismatch",
-      `\u3053\u306E stagingId \u306F kind: "${found.record.kind}" \u3067\u3059\u3002${command} \u304C\u53D7\u3051\u308B\u306E\u306F ${spec.acceptedKinds.map((kind) => `"${kind}"`).join(" / ")} \u3067\u3059\u3002${spec.stageHint}`,
-      {
-        written: false,
-        stagingId: stagingId.trim(),
-        kind: found.record.kind,
-        acceptedKinds: [...spec.acceptedKinds]
-      }
-    );
-    return;
-  }
-  if (found.record.kind === "adr" && !ctx.features.adr) {
-    emitFeatureDisabled(command, "adr");
-    return;
-  }
   const targetPath = found.record.targetPath;
   let result;
   try {
@@ -4687,7 +2753,7 @@ function runCommit(ctx, spec) {
       })
     );
   } catch (error) {
-    if (error instanceof GotchaError) {
+    if (error instanceof FileLockError) {
       emitWriteFailure(command, error.code, error.message, {
         written: false,
         stagingId: stagingId.trim(),
@@ -4725,26 +2791,18 @@ function runCommit(ctx, spec) {
 function runCommitArchitecture(ctx) {
   runCommit(ctx, {
     command: "commit-architecture",
-    acceptedKinds: ["architecture", "adr"],
-    stageHint: "stage-architecture \u307E\u305F\u306F stage-adr \u304C\u8FD4\u3057\u305F stagingId \u3092\u6E21\u3057\u3066\u304F\u3060\u3055\u3044\u3002"
-  });
-}
-function runCommitGotchas(ctx) {
-  runCommit(ctx, {
-    command: "commit-gotchas",
-    acceptedKinds: ["gotchas"],
-    stageHint: "stage-gotcha \u304C\u8FD4\u3057\u305F stagingId \u3092\u6E21\u3057\u3066\u304F\u3060\u3055\u3044\u3002"
+    stageHint: "stage-architecture \u304C\u8FD4\u3057\u305F stagingId \u3092\u6E21\u3057\u3066\u304F\u3060\u3055\u3044\u3002"
   });
 }
 
 // src/cli/paths.ts
-import path9 from "node:path";
+import path7 from "node:path";
 import { fileURLToPath } from "node:url";
 function metatronCliPath() {
   const here = fileURLToPath(import.meta.url);
-  if (path9.basename(here) === "metatron.mjs") return here;
-  const pluginRoot = path9.resolve(path9.dirname(here), "..", "..");
-  return path9.join(pluginRoot, "scripts", "metatron.mjs");
+  if (path7.basename(here) === "metatron.mjs") return here;
+  const pluginRoot = path7.resolve(path7.dirname(here), "..", "..");
+  return path7.join(pluginRoot, "scripts", "metatron.mjs");
 }
 function commandLine(args) {
   return `node ${metatronCliPath()} ${args}`;
@@ -4753,28 +2811,7 @@ var INPUT_SCHEMAS = {
   "stage-architecture": {
     input: "{ sections: [{ heading, body } | { heading, remove: true }], reason? }",
     headings: [...ARCHITECTURE_HEADINGS],
-    note: "`ADR \u4E00\u89A7` \u306F\u6307\u5B9A\u3067\u304D\u307E\u305B\u3093\u3002ADR \u306E\u8FFD\u52A0\u30FB\u72B6\u614B\u5909\u66F4\u306F stage-adr \u3092\u4F7F\u3063\u3066\u304F\u3060\u3055\u3044\u3002remove: true \u306E\u524A\u9664\u306F\u898B\u51FA\u3057\u8A31\u53EF\u30EA\u30B9\u30C8\u306E\u5236\u9650\u3092\u53D7\u3051\u307E\u305B\u3093(body \u3068\u306E\u540C\u6642\u6307\u5B9A\u306F\u62D2\u5426)\u3002"
-  },
-  "stage-adr": {
-    add: '{ mode: "add", title, status?, decidedOn?, decidedBy, background, options: [...], conclusion, rationale, impact }',
-    status: '{ mode: "status", id: "ADR-003", status: "\u63A1\u7528" | "\u63D0\u6848" | "\u5EC3\u6B62", reason, changedOn? }',
-    note: "\u63A1\u756A\u306F CLI \u304C\u884C\u3046\u3002\u66F8\u304D\u8FBC\u307F\u306F commit-architecture --staging-id <id>\u3002"
-  },
-  "append-gotcha": {
-    input: '{ title, date?, task, mistake, cause, countermeasure, promotionCandidate: "Yes" | "No" }',
-    note: "\u63A1\u756A\u306F CLI \u304C\u884C\u3046\u3002`## \u5931\u6557\u30D1\u30BF\u30FC\u30F3\u4E00\u89A7` \u306E\u76F4\u4E0B(\u5148\u982D)\u306B\u633F\u5165\u3059\u308B\u3002"
-  },
-  "init-gotchas": {
-    usage: "init-gotchas",
-    note: "\u5165\u529B\u3092\u53D6\u3089\u306A\u3044\u3002\u96DB\u5F62\u3060\u3051\u306E\u53F0\u5E33\u3092\u65B0\u898F\u4F5C\u6210\u3059\u308B\u3002\u5185\u5BB9\u306E\u3042\u308B\u53F0\u5E33\u304C\u3042\u308B\u3068\u304D\u306F already_exists \u3067\u62D2\u5426\u3059\u308B\u3002\u5B9F\u884C\u306E\u524D\u306B\u30E6\u30FC\u30B6\u30FC\u306E\u627F\u8A8D\u3092\u5F97\u308B\u3053\u3068\u3002"
-  },
-  "stage-gotcha": {
-    input: '{ id: "GOTCHA-003", title?, task?, mistake?, cause?, countermeasure?, promotionCandidate?: "Yes" | "No", reason? }',
-    note: "\u65E2\u5B58\u30A8\u30F3\u30C8\u30EA\u306E\u30D5\u30A3\u30FC\u30EB\u30C9\u3092\u66F8\u304D\u63DB\u3048\u308B\u5DEE\u5206\u3092\u4F5C\u308B\u3002id \u4EE5\u5916\u306F\u7701\u7565\u3057\u305F\u30D5\u30A3\u30FC\u30EB\u30C9\u306E\u73FE\u884C\u306E\u5024\u3092\u4FDD\u3061\u30011 \u3064\u3082\u5909\u308F\u3089\u306A\u3044\u5165\u529B\u306F\u62D2\u5426\u3059\u308B\u3002\u898B\u51FA\u3057\u306E\u65E5\u4ED8\u30FB\u756A\u53F7\u30FB\u30BF\u30B0\u3001\u30BF\u30B0\u306E\u7406\u7531\u884C\u306F\u4FDD\u3064\u3002title \u3092\u30BF\u30B0\u3067\u59CB\u3081\u3089\u308C\u306A\u3044\u3002\u66F8\u304D\u63DB\u3048\u308B\u5024\u3068 title \u306B\u6587\u5B57\u304B\u6570\u5B57\u304C 1 \u3064\u3082\u7121\u3044(\u7A7A\u30FB\u8A18\u53F7\u3060\u3051\u30FB\u30BC\u30ED\u5E45\u30B9\u30DA\u30FC\u30B9\u3060\u3051)\u5165\u529B\u306F\u62D2\u5426\u3059\u308B\u3002\u53F0\u5E33\u306E\u69CB\u9020\u304C\u5D29\u308C\u3066\u3044\u308B(\u9589\u3058\u3066\u3044\u306A\u3044\u30B3\u30FC\u30C9\u30D5\u30A7\u30F3\u30B9\u3001\u30D5\u30A7\u30F3\u30B9\u304C\u8907\u6570\u306E\u30A8\u30F3\u30C8\u30EA\u306B\u307E\u305F\u304C\u308B\u3001\u5D29\u308C\u3066\u98F2\u307F\u8FBC\u307E\u308C\u305F\u898B\u51FA\u3057)\u3068\u304D\u3082\u62D2\u5426\u3059\u308B\u3002\u66F8\u304D\u8FBC\u307F\u306F commit-gotchas --staging-id <id>\u3002"
-  },
-  "tag-gotcha": {
-    usage: "tag-gotcha --id GOTCHA-003 --tag \u89E3\u6C7A\u6E08\u307F|\u5BFE\u8C61\u5916 --reason <\u7406\u7531>",
-    note: "\u898B\u51FA\u3057\u3078\u306E\u30BF\u30B0\u633F\u5165\u3068\u672B\u5C3E\u306E\u7406\u7531\u884C\u306E\u8FFD\u8A18\u3060\u3051\u3092\u884C\u3046\u3002\u672C\u6587\u306F\u66F8\u304D\u63DB\u3048\u306A\u3044\u3002"
+    note: "remove: true \u306E\u524A\u9664\u306F\u898B\u51FA\u3057\u8A31\u53EF\u30EA\u30B9\u30C8\u306E\u5236\u9650\u3092\u53D7\u3051\u307E\u305B\u3093(body \u3068\u306E\u540C\u6642\u6307\u5B9A\u306F\u62D2\u5426)\u3002\u66F8\u304D\u8FBC\u307F\u306F commit-architecture --staging-id <id>\u3002"
   }
 };
 var USAGE_LINES = [
@@ -4784,28 +2821,15 @@ var USAGE_LINES = [
   "  get config",
   "  get architecture [--section <\u898B\u51FA\u3057>]",
   "  get domains",
-  "  get gotchas [--recent N | --id <ID> | --query <\u8A9E>] [--exclude-tagged] [--promotion-candidates]",
-  "  get gotchas-template",
-  "  get adr [--id <ID> | --status <\u72B6\u614B>]",
   "  scan",
   "  diff-architecture",
-  "  scan-adr-candidates",
-  "  scan-gotcha-candidates",
   "",
   "\u6BB5\u968E(\u62D2\u5426\u306F\u975E 0):",
   "  stage-architecture --input <path>",
-  "  stage-adr --input <path>",
-  "  stage-gotcha --input <path>",
   "",
   "\u66F8\u304D\u8FBC\u307F(\u62D2\u5426\u30FB\u5931\u6557\u306F\u975E 0):",
   "  commit-architecture --staging-id <id>",
-  "  commit-gotchas --staging-id <id>",
-  "  init-gotchas",
-  "  link-claude-md",
-  "  append-gotcha --input <path>",
-  "  tag-gotcha --id <ID> --tag <\u89E3\u6C7A\u6E08\u307F|\u5BFE\u8C61\u5916> --reason <\u7406\u7531>",
-  "  shrink-adr-candidate --file <path> --candidate-id <\u5019\u88DC ID> --adr <ADR-NNN> --hash <\u8D70\u67FB\u306E hash>",
-  "  remove-gotcha-candidate --file <path> --hash <\u8D70\u67FB\u306E hash> --file-hash <\u8D70\u67FB\u306E fileHash>"
+  "  link-claude-md"
 ];
 
 // src/cli/get.ts
@@ -4816,12 +2840,7 @@ function runGetConfig(ctx) {
   const command = "get config";
   const config = configOf(ctx.cwd);
   const architecture = readDocument(config.architecturePath);
-  const gotchas = readDocument(config.gotchasPath);
-  const warnings = [
-    ...config.warnings,
-    ...architecture.warnings,
-    ...gotchas.warnings
-  ];
+  const warnings = [...config.warnings, ...architecture.warnings];
   noteWarnings(warnings);
   emitResult(command, {
     ok: true,
@@ -4833,27 +2852,11 @@ function runGetConfig(ctx) {
       relative: config.architectureRelative,
       exists: architecture.exists
     },
-    gotchas: {
-      path: config.gotchasPath,
-      relative: config.gotchasRelative,
-      exists: gotchas.exists
-    },
-    // 記録の有効・無効。metatron.config.json ではなく環境変数から決まる(設計書 2026-10-08 の 2)。
-    features: ctx.features,
     cli: {
       path: metatronCliPath(),
       stageArchitecture: commandLine("stage-architecture --input <path>"),
-      stageAdr: commandLine("stage-adr --input <path>"),
       commitArchitecture: commandLine("commit-architecture --staging-id <id>"),
-      initGotchas: commandLine("init-gotchas"),
-      linkClaudeMd: commandLine("link-claude-md"),
-      getGotchasTemplate: commandLine("get gotchas-template"),
-      appendGotcha: commandLine("append-gotcha --input <path>"),
-      tagGotcha: commandLine(
-        "tag-gotcha --id <GOTCHA-NNN> --tag <\u89E3\u6C7A\u6E08\u307F|\u5BFE\u8C61\u5916> --reason <\u7406\u7531>"
-      ),
-      stageGotcha: commandLine("stage-gotcha --input <path>"),
-      commitGotchas: commandLine("commit-gotchas --staging-id <id>")
+      linkClaudeMd: commandLine("link-claude-md")
     },
     inputSchemas: INPUT_SCHEMAS,
     warnings
@@ -4954,164 +2957,7 @@ function runGetDomains(ctx) {
     warnings
   });
 }
-function serializeGotcha(entry) {
-  return {
-    id: entry.id,
-    number: entry.number,
-    date: entry.date,
-    tag: entry.tag,
-    title: entry.title,
-    task: entry.task,
-    mistake: entry.mistake,
-    cause: entry.cause,
-    countermeasure: entry.countermeasure,
-    promotionCandidate: entry.promotionCandidate,
-    raw: entry.raw
-  };
-}
-function runGetGotchas(ctx) {
-  const command = "get gotchas";
-  const config = configOf(ctx.cwd);
-  const file = readDocument(config.gotchasPath);
-  const doc = parseGotchas(file.text);
-  const warnings = [...config.warnings, ...file.warnings, ...doc.warnings];
-  noteWarnings(warnings);
-  const recent = intFlag(ctx.flags, "recent");
-  if (!recent.ok) {
-    emitReadFailure(command, "invalid_option", recent.message, {
-      path: config.gotchasPath,
-      exists: file.exists,
-      entries: [],
-      warnings
-    });
-    return;
-  }
-  const filter = {
-    id: stringFlag(ctx.flags, "id"),
-    query: stringFlag(ctx.flags, "query"),
-    recent: recent.value,
-    excludeTagged: boolFlag(ctx.flags, "exclude-tagged"),
-    promotionCandidates: boolFlag(ctx.flags, "promotion-candidates")
-  };
-  if (!file.exists) {
-    emitReadFailure(
-      command,
-      "not_created",
-      `${config.gotchasPath} \u306F\u672A\u4F5C\u6210\u3067\u3059\u3002/metatron:init \u304C\u53F0\u5E33\u3092\u4F5C\u308A\u307E\u3059\u3002init \u3092\u7D4C\u305A\u306B\u8A18\u9332\u3059\u308B\u3068\u304D\u306F append-gotcha \u304C\u53F0\u5E33\u3054\u3068\u4F5C\u6210\u3057\u307E\u3059\u3002`,
-      {
-        path: config.gotchasPath,
-        exists: false,
-        total: 0,
-        count: 0,
-        filter,
-        entries: [],
-        warnings
-      }
-    );
-    return;
-  }
-  const entries = filterGotchas(doc.entries, filter);
-  emitResult(command, {
-    ok: true,
-    path: config.gotchasPath,
-    exists: true,
-    total: doc.entries.length,
-    count: entries.length,
-    promotionCandidateCount: doc.entries.filter(
-      (e) => e.promotionCandidate === "Yes"
-    ).length,
-    filter,
-    entries: entries.map(serializeGotcha),
-    warnings
-  });
-}
-function runGetGotchasTemplate(ctx) {
-  const command = "get gotchas-template";
-  const config = configOf(ctx.cwd);
-  const file = readDocument(config.gotchasPath);
-  const hasContent2 = file.exists && file.text.trim() !== "";
-  const warnings = [...config.warnings, ...file.warnings];
-  noteWarnings(warnings);
-  emitResult(command, {
-    ok: true,
-    path: config.gotchasPath,
-    relative: config.gotchasRelative,
-    exists: file.exists,
-    hasContent: hasContent2,
-    template: renderGotchasTemplate(),
-    next: hasContent2 ? null : commandLine("init-gotchas"),
-    warnings
-  });
-}
-function serializeAdr(entry) {
-  return {
-    id: entry.id,
-    number: entry.number,
-    title: entry.title,
-    status: entry.status,
-    statusRaw: entry.statusRaw,
-    decidedOn: entry.decidedOn,
-    decidedBy: entry.decidedBy,
-    statusChanges: entry.statusChanges.map((change) => ({
-      date: change.date,
-      from: change.from,
-      to: change.to,
-      reason: change.reason
-    })),
-    raw: entry.raw
-  };
-}
-function runGetAdr(ctx) {
-  const command = "get adr";
-  const config = configOf(ctx.cwd);
-  const file = readDocument(config.architecturePath);
-  const doc = parseAdrDocument(file.text);
-  const warnings = [...config.warnings, ...file.warnings, ...doc.warnings];
-  noteWarnings(warnings);
-  const filter = {
-    id: stringFlag(ctx.flags, "id"),
-    status: stringFlag(ctx.flags, "status")
-  };
-  if (!file.exists) {
-    emitReadFailure(
-      command,
-      "not_created",
-      `${config.architecturePath} \u306F\u672A\u4F5C\u6210\u3067\u3059\u3002stage-adr \u304C\u7BC0\u3054\u3068\u4F5C\u6210\u3057\u307E\u3059\u3002`,
-      {
-        path: config.architecturePath,
-        exists: false,
-        hasSection: false,
-        total: 0,
-        count: 0,
-        filter,
-        entries: [],
-        warnings
-      }
-    );
-    return;
-  }
-  const entries = filterAdrEntries(doc.entries, filter);
-  emitResult(command, {
-    ok: true,
-    path: config.architecturePath,
-    exists: true,
-    hasSection: doc.hasSection,
-    total: doc.entries.length,
-    count: entries.length,
-    nextNumber: doc.nextNumber,
-    filter,
-    entries: entries.map(serializeAdr),
-    warnings
-  });
-}
-var GET_TARGETS = [
-  "config",
-  "architecture",
-  "domains",
-  "gotchas",
-  "gotchas-template",
-  "adr"
-];
+var GET_TARGETS = ["config", "architecture", "domains"];
 function runGet(target, ctx) {
   const command = target === void 0 ? "get" : `get ${target}`;
   try {
@@ -5125,15 +2971,6 @@ function runGet(target, ctx) {
       case "domains":
         runGetDomains(ctx);
         return;
-      case "gotchas":
-        runGetGotchas(ctx);
-        return;
-      case "gotchas-template":
-        runGetGotchasTemplate(ctx);
-        return;
-      case "adr":
-        runGetAdr(ctx);
-        return;
       default:
         emitReadFailure(
           command,
@@ -5145,467 +2982,6 @@ function runGet(target, ctx) {
     }
   } catch (error) {
     emitReadFailure(command, "internal_error", messageOf(error));
-  }
-}
-
-// src/cli/gotcha.ts
-function failFromError(command, error, extra) {
-  if (error instanceof GotchaError) {
-    emitWriteFailure(command, error.code, error.message, {
-      ...extra,
-      details: error.details
-    });
-    return;
-  }
-  emitWriteFailure(command, "internal_error", messageOf(error), extra);
-}
-function runInitGotchas(ctx) {
-  const command = "init-gotchas";
-  const config = loadConfig(ctx.cwd);
-  try {
-    const result = initGotchasLedger(config.gotchasPath);
-    noteWarnings(config.warnings);
-    emitResult(command, {
-      ok: true,
-      written: true,
-      created: result.created,
-      path: result.path,
-      relative: config.gotchasRelative,
-      bytesWritten: result.bytesWritten,
-      warnings: config.warnings
-    });
-  } catch (error) {
-    failFromError(command, error, {
-      written: false,
-      path: config.gotchasPath
-    });
-  }
-}
-function runAppendGotcha(ctx) {
-  const command = "append-gotcha";
-  const input = loadInputJson(ctx.flags);
-  if (!input.ok) {
-    emitWriteFailure(
-      command,
-      input.error,
-      input.message,
-      { written: false },
-      EXIT_USAGE
-    );
-    return;
-  }
-  if (!isPlainObject4(input.value)) {
-    emitWriteFailure(
-      command,
-      "invalid_input",
-      `${input.source} \u306E\u30C8\u30C3\u30D7\u30EC\u30D9\u30EB\u306F { title, task, mistake, cause, countermeasure, promotionCandidate } \u306E\u30AA\u30D6\u30B8\u30A7\u30AF\u30C8\u3067\u3042\u308B\u5FC5\u8981\u304C\u3042\u308A\u307E\u3059\u3002`,
-      { written: false },
-      EXIT_USAGE
-    );
-    return;
-  }
-  const config = loadConfig(ctx.cwd);
-  try {
-    const result = appendGotcha(
-      config.gotchasPath,
-      input.value
-    );
-    const warnings = [...config.warnings, ...result.warnings];
-    noteWarnings(warnings);
-    emitResult(command, {
-      ok: true,
-      written: true,
-      id: result.id,
-      number: result.number,
-      path: result.path,
-      date: result.date,
-      created: result.created,
-      sectionCreated: result.sectionCreated,
-      warnings
-    });
-  } catch (error) {
-    failFromError(command, error, {
-      written: false,
-      path: config.gotchasPath
-    });
-  }
-}
-function runTagGotcha(ctx) {
-  const command = "tag-gotcha";
-  const id = stringFlag(ctx.flags, "id");
-  const tag = stringFlag(ctx.flags, "tag");
-  const reason = stringFlag(ctx.flags, "reason");
-  const date = stringFlag(ctx.flags, "date");
-  const missing = [];
-  if (id === void 0) missing.push("--id <GOTCHA-NNN>");
-  if (tag === void 0) missing.push(`--tag <${GOTCHA_TAGS.join("|")}>`);
-  if (reason === void 0) missing.push("--reason <\u7406\u7531>");
-  if (missing.length > 0) {
-    emitWriteFailure(
-      command,
-      "missing_option",
-      `${missing.join(" / ")} \u304C\u5FC5\u8981\u3067\u3059\u3002`,
-      { written: false },
-      EXIT_USAGE
-    );
-    return;
-  }
-  const config = loadConfig(ctx.cwd);
-  try {
-    const result = tagGotcha(config.gotchasPath, {
-      id,
-      tag,
-      reason,
-      date
-    });
-    const warnings = [...config.warnings, ...result.warnings];
-    noteWarnings(warnings);
-    emitResult(command, {
-      ok: true,
-      written: true,
-      id: result.id,
-      path: result.path,
-      tag: result.tag,
-      previousTag: result.previousTag,
-      date: result.date,
-      warnings
-    });
-  } catch (error) {
-    failFromError(command, error, {
-      written: false,
-      path: config.gotchasPath
-    });
-  }
-}
-
-// src/cli/gotcha-candidate.ts
-import path11 from "node:path";
-
-// src/lib/gotcha-candidates.ts
-import crypto4 from "node:crypto";
-import fs11 from "node:fs";
-import path10 from "node:path";
-var CANDIDATE_KEYS = [
-  "date",
-  "run",
-  "task",
-  "mistake",
-  "cause",
-  "countermeasure",
-  "promotionCandidate"
-];
-var GotchaCandidateError = class extends Error {
-  code;
-  constructor(code, message) {
-    super(message);
-    this.name = "GotchaCandidateError";
-    this.code = code;
-  }
-};
-var BOUNDARY_RE2 = /^ {0,3}#{2,3}(?:[ \t]|$)/;
-var H2_RE = /^ {0,3}##[ \t]+(.*?)[ \t]*$/;
-var H3_RE2 = /^ {0,3}###[ \t]+(.*)$/;
-var MARKED_HEADING_RE2 = /^(.*?)[ \t]*\[GOTCHAS 候補\][ \t]*$/;
-var FIELD_RE2 = new RegExp(
-  `^ {0,3}-[ \\t]+(${CANDIDATE_KEYS.join("|")})[ \\t]*:[ \\t]*(.*?)[ \\t]*$`
-);
-var PARENT_HEADING = "GOTCHAS \u5019\u88DC";
-function lineOffsets2(buf) {
-  const offsets = [0];
-  for (let i = 0; i < buf.length; i++) {
-    if (buf[i] === 10) offsets.push(i + 1);
-  }
-  return (lineIndex) => offsets[lineIndex] ?? buf.length;
-}
-function parseDomainFile2(buf) {
-  const scan2 = scanFences(buf.toString("utf8"));
-  const { insideFence } = scan2;
-  const lines = scan2.lines.map((l) => l.text);
-  const boundaries = [];
-  for (let i = 0; i < lines.length; i++) {
-    if (!insideFence[i] && BOUNDARY_RE2.test(lines[i])) boundaries.push(i);
-  }
-  const h2s = boundaries.filter((i) => H2_RE.test(lines[i]));
-  const entries = [];
-  boundaries.forEach((start, k) => {
-    const h3 = H3_RE2.exec(lines[start]);
-    if (h3 === null) return;
-    const mark = MARKED_HEADING_RE2.exec(h3[1]);
-    if (mark === null) return;
-    const end = boundaries[k + 1] ?? lines.length;
-    let parent = null;
-    const parentIndex = h2s.filter((i) => i < start).at(-1);
-    if (parentIndex !== void 0) {
-      parent = {
-        start: parentIndex,
-        end: h2s.find((i) => i > parentIndex) ?? lines.length,
-        title: H2_RE.exec(lines[parentIndex])?.[1] ?? ""
-      };
-    }
-    const seen = {};
-    for (let i = start + 1; i < end; i++) {
-      if (insideFence[i]) continue;
-      const field = FIELD_RE2.exec(lines[i]);
-      if (field === null) continue;
-      const key = field[1];
-      if (seen[key] === void 0) seen[key] = field[2].trim();
-    }
-    const fields = {};
-    const problems = [];
-    for (const key of CANDIDATE_KEYS) {
-      const value = seen[key];
-      if (value === void 0 || value === "") {
-        fields[key] = null;
-        problems.push(`${key} \u306E\u5024\u304C\u3042\u308A\u307E\u305B\u3093`);
-        continue;
-      }
-      fields[key] = value;
-      if (key === "promotionCandidate" && value !== "Yes" && value !== "No") {
-        problems.push(
-          `promotionCandidate \u306F Yes \u304B No \u306B\u3057\u3066\u304F\u3060\u3055\u3044(\u53D7\u9818: ${value})`
-        );
-      }
-    }
-    entries.push({
-      heading: lines[start],
-      title: mark[1].trim(),
-      start,
-      end,
-      parent,
-      fields,
-      problems
-    });
-  });
-  return { entries, offsetOf: lineOffsets2(buf), lines, buf };
-}
-function entryHash2(file, entry) {
-  return hashContent(
-    file.buf.subarray(file.offsetOf(entry.start), file.offsetOf(entry.end))
-  );
-}
-function readTextOrNull2(filePath) {
-  try {
-    return fs11.readFileSync(filePath, "utf8");
-  } catch {
-    return null;
-  }
-}
-function scanGotchaCandidates(docRoot, gotchasPath) {
-  const repoRoot = findRepoRoot(docRoot);
-  if (repoRoot === null) return { repoRoot: null, candidates: [], warnings: [] };
-  const warnings = [];
-  const dir = path10.join(repoRoot, DOMAINS_DIR_RELATIVE);
-  if (!domainsDirStaysInRepo(repoRoot, dir)) {
-    warnings.push(
-      `${DOMAINS_DIR_RELATIVE} \u306E\u5B9F\u4F53\u304C\u30EA\u30DD\u30B8\u30C8\u30EA\u306E\u5916\u306B\u3042\u308A\u307E\u3059\u3002\u8D70\u67FB\u3057\u307E\u305B\u3093\u3002`
-    );
-    return { repoRoot, candidates: [], warnings };
-  }
-  let names;
-  try {
-    names = fs11.readdirSync(dir, { withFileTypes: true }).filter((d) => d.isFile() && d.name.endsWith(".md")).map((d) => d.name).sort();
-  } catch (error) {
-    if (error.code !== "ENOENT") {
-      warnings.push(`${DOMAINS_DIR_RELATIVE} \u3092\u8AAD\u3081\u307E\u305B\u3093\u3067\u3057\u305F\u3002`);
-    }
-    return { repoRoot, candidates: [], warnings };
-  }
-  const ledger = /* @__PURE__ */ new Map();
-  const ledgerText = readTextOrNull2(gotchasPath);
-  if (ledgerText !== null) {
-    for (const entry of parseGotchas(ledgerText).entries) {
-      ledger.set(entry.title, [...ledger.get(entry.title) ?? [], entry.id]);
-    }
-  }
-  const candidates = [];
-  for (const name of names) {
-    const filePath = path10.join(dir, name);
-    const relative = `${DOMAINS_DIR_RELATIVE}/${name}`;
-    let parsed;
-    try {
-      parsed = parseDomainFile2(fs11.readFileSync(filePath));
-    } catch {
-      warnings.push(`${relative} \u3092\u8AAD\u3081\u307E\u305B\u3093\u3067\u3057\u305F\u3002`);
-      continue;
-    }
-    const fileHash = hashContent(parsed.buf);
-    for (const entry of parsed.entries) {
-      candidates.push({
-        file: filePath,
-        relative,
-        heading: entry.heading,
-        title: entry.title,
-        fields: entry.fields,
-        problems: entry.problems,
-        hash: entryHash2(parsed, entry),
-        fileHash,
-        ledgerMatches: ledger.get(entry.title) ?? []
-      });
-    }
-  }
-  return { repoRoot, candidates, warnings };
-}
-function resolveDomainFile2(repoRoot, file) {
-  const dir = path10.join(repoRoot, DOMAINS_DIR_RELATIVE);
-  const target = path10.resolve(file);
-  const outside = new GotchaCandidateError(
-    "outside_domains_dir",
-    `${file} \u306F ${dir} \u306E\u76F4\u4E0B\u306B\u3042\u308B .md \u3067\u306F\u3042\u308A\u307E\u305B\u3093\u3002\u524A\u9664\u306F\u305D\u3053\u306B\u3042\u308B\u6301\u7D9A\u5C64\u306E\u30D5\u30A1\u30A4\u30EB\u3060\u3051\u3092\u66F8\u304D\u63DB\u3048\u307E\u3059\u3002`
-  );
-  if (path10.extname(target) !== ".md") throw outside;
-  if (!domainsDirStaysInRepo(repoRoot, dir)) throw outside;
-  if (realpathOrSelf(path10.dirname(target)) !== realpathOrSelf(dir)) {
-    throw outside;
-  }
-  let stat;
-  try {
-    stat = fs11.lstatSync(target);
-  } catch {
-    throw new GotchaCandidateError("file_not_found", `${target} \u304C\u3042\u308A\u307E\u305B\u3093\u3002`);
-  }
-  if (!stat.isFile()) throw outside;
-  return { target, mode: stat.mode & 511 };
-}
-function readTarget(target) {
-  try {
-    return fs11.readFileSync(target);
-  } catch {
-    throw new GotchaCandidateError("file_not_found", `${target} \u3092\u8AAD\u3081\u307E\u305B\u3093\u3002`);
-  }
-}
-function writeAtomically2(target, content, mode) {
-  const tmp = `${target}.tmp-${crypto4.randomUUID()}`;
-  try {
-    fs11.writeFileSync(tmp, content, { mode });
-    fs11.renameSync(tmp, target);
-  } catch (error) {
-    try {
-      fs11.rmSync(tmp, { force: true });
-    } catch {
-    }
-    const reason = error instanceof Error ? error.message : String(error);
-    throw new GotchaCandidateError(
-      "write_failed",
-      `${target} \u3092\u66F8\u304D\u8FBC\u3081\u307E\u305B\u3093\u3067\u3057\u305F: ${reason}`
-    );
-  }
-}
-function changedError(target) {
-  return new GotchaCandidateError(
-    "file_changed",
-    `${target} \u304C\u8D70\u67FB\u306E\u3068\u304D\u304B\u3089\u5909\u308F\u3063\u3066\u3044\u307E\u3059\u3002\u8D70\u67FB\u3057\u76F4\u3057\u3066\u304F\u3060\u3055\u3044\u3002`
-  );
-}
-function removeGotchaCandidate(input) {
-  const repoRoot = findRepoRoot(input.docRoot);
-  if (repoRoot === null) {
-    throw new GotchaCandidateError(
-      "not_git_repository",
-      `${input.docRoot} \u306F git \u30EA\u30DD\u30B8\u30C8\u30EA\u306E\u4E2D\u306B\u306A\u3044\u305F\u3081\u3001\u6301\u7D9A\u5C64\u306E\u7F6E\u304D\u5834\u3092\u6C7A\u3081\u3089\u308C\u307E\u305B\u3093\u3002`
-    );
-  }
-  const { target, mode } = resolveDomainFile2(repoRoot, input.file);
-  const buf = readTarget(target);
-  if (hashContent(buf) !== input.fileHash) throw changedError(target);
-  const parsed = parseDomainFile2(buf);
-  const entry = parsed.entries.find((e) => entryHash2(parsed, e) === input.hash);
-  if (entry === void 0) {
-    throw new GotchaCandidateError(
-      "candidate_not_found",
-      `${target} \u306B\u30CF\u30C3\u30B7\u30E5 ${input.hash} \u306E\u30A8\u30F3\u30C8\u30EA\u304C\u3042\u308A\u307E\u305B\u3093\u3002`
-    );
-  }
-  let from = entry.start;
-  let to = entry.end;
-  const parent = entry.parent;
-  if (parent !== null && parent.title === PARENT_HEADING) {
-    let onlyBlank = true;
-    for (let i = parent.start + 1; i < parent.end; i++) {
-      if (i >= entry.start && i < entry.end) continue;
-      if (parsed.lines[i].trim() !== "") {
-        onlyBlank = false;
-        break;
-      }
-    }
-    if (onlyBlank) {
-      from = parent.start;
-      to = parent.end;
-    }
-  }
-  const next = Buffer.concat([
-    buf.subarray(0, parsed.offsetOf(from)),
-    buf.subarray(parsed.offsetOf(to))
-  ]);
-  if (hashContent(readTarget(target)) !== input.fileHash) {
-    throw changedError(target);
-  }
-  writeAtomically2(target, next, mode);
-  return { file: target, title: entry.title };
-}
-
-// src/cli/gotcha-candidate.ts
-function runScanGotchaCandidates(ctx) {
-  const command = "scan-gotcha-candidates";
-  try {
-    const config = loadConfig(ctx.cwd);
-    const result = scanGotchaCandidates(config.docRoot, config.gotchasPath);
-    const warnings = [...config.warnings, ...result.warnings];
-    noteWarnings(warnings);
-    emitResult(command, {
-      ok: true,
-      repoRoot: result.repoRoot,
-      candidates: result.candidates,
-      warnings
-    });
-  } catch (error) {
-    emitReadFailure(command, "internal_error", messageOf(error), {
-      candidates: []
-    });
-  }
-}
-function runRemoveGotchaCandidate(ctx) {
-  const command = "remove-gotcha-candidate";
-  const file = stringFlag(ctx.flags, "file");
-  const hash = stringFlag(ctx.flags, "hash");
-  const fileHash = stringFlag(ctx.flags, "file-hash");
-  const missing = [];
-  if (file === void 0) missing.push("--file <path>");
-  if (hash === void 0) missing.push("--hash <\u8D70\u67FB\u306E hash>");
-  if (fileHash === void 0) missing.push("--file-hash <\u8D70\u67FB\u306E fileHash>");
-  if (file === void 0 || hash === void 0 || fileHash === void 0) {
-    emitWriteFailure(
-      command,
-      "missing_option",
-      `${missing.join(" / ")} \u304C\u5FC5\u8981\u3067\u3059\u3002`,
-      { written: false },
-      EXIT_USAGE
-    );
-    return;
-  }
-  try {
-    const config = loadConfig(ctx.cwd);
-    const result = removeGotchaCandidate({
-      docRoot: config.docRoot,
-      file: path11.resolve(ctx.cwd, file),
-      hash,
-      fileHash
-    });
-    noteWarnings(config.warnings);
-    emitResult(command, {
-      ok: true,
-      written: true,
-      file: result.file,
-      title: result.title,
-      warnings: config.warnings
-    });
-  } catch (error) {
-    emitWriteFailure(
-      command,
-      error instanceof GotchaCandidateError ? error.code : "internal_error",
-      messageOf(error),
-      { written: false, removePending: { file, hash } },
-      EXIT_SHRINK_PENDING
-    );
   }
 }
 
@@ -5855,236 +3231,13 @@ function runStageArchitecture(ctx) {
     )
   });
 }
-function runStageAdr(ctx) {
-  const command = "stage-adr";
-  const input = loadInputJson(ctx.flags);
-  if (!input.ok) {
-    emitWriteFailure(
-      command,
-      input.error,
-      input.message,
-      { valid: false },
-      EXIT_USAGE
-    );
-    return;
-  }
-  if (!isPlainObject4(input.value)) {
-    emitWriteFailure(
-      command,
-      "invalid_input",
-      `${input.source} \u306E\u30C8\u30C3\u30D7\u30EC\u30D9\u30EB\u306F { mode: "add" | "status", ... } \u306E\u30AA\u30D6\u30B8\u30A7\u30AF\u30C8\u3067\u3042\u308B\u5FC5\u8981\u304C\u3042\u308A\u307E\u3059\u3002`,
-      { valid: false },
-      EXIT_USAGE
-    );
-    return;
-  }
-  const config = loadConfig(ctx.cwd);
-  let result;
-  try {
-    result = stageAdr(
-      config.architecturePath,
-      input.value
-    );
-  } catch (error) {
-    if (error instanceof AdrError) {
-      emitWriteFailure(command, error.code, error.message, {
-        valid: false,
-        stagingId: null,
-        path: config.architecturePath,
-        details: error.details,
-        warnings: config.warnings
-      });
-      return;
-    }
-    emitWriteFailure(command, "internal_error", messageOf(error), {
-      valid: false,
-      stagingId: null,
-      path: config.architecturePath
-    });
-    return;
-  }
-  const warnings = [...config.warnings, ...result.warnings];
-  noteWarnings(warnings);
-  const staged = createStaging({
-    projectRoot: config.docRoot,
-    kind: "adr",
-    targetPath: config.architecturePath,
-    nextContent: result.nextText,
-    // stageAdr が採番のために読んだ本文をそのまま照合対象にする。
-    baseHash: result.baseExists ? hashContent(result.baseText) : null,
-    meta: {
-      mode: result.mode,
-      id: result.id,
-      assignedId: result.assignedId,
-      status: result.status,
-      date: result.date
-    }
-  });
-  if (!staged.ok) {
-    emitWriteFailure(command, staged.error, staged.reasons.join(" / "), {
-      valid: false,
-      stagingId: null,
-      path: config.architecturePath,
-      warnings
-    });
-    return;
-  }
-  const diff = unifiedDiff(result.baseText, result.nextText, {
-    fromLabel: `${config.architectureRelative} (\u73FE\u884C)`,
-    toLabel: `${config.architectureRelative} (stage)`
-  });
-  emitResult(command, {
-    ok: true,
-    valid: true,
-    stagingId: staged.stagingId,
-    mode: result.mode,
-    path: config.architecturePath,
-    baseExists: result.baseExists,
-    id: result.id,
-    number: result.number,
-    assignedId: result.assignedId,
-    previousStatus: result.previousStatus,
-    status: result.status,
-    date: result.date,
-    created: result.created,
-    sectionCreated: result.sectionCreated,
-    diff: diffPayload(
-      diff,
-      sectionDiffs(result.baseText, result.nextText, [
-        {
-          heading: ADR_HEADING,
-          mode: result.sectionCreated ? "added" : "replaced"
-        }
-      ])
-    ),
-    expiresAt: new Date(staged.expiresAt).toISOString(),
-    warnings,
-    next: commandLine(`commit-architecture --staging-id ${staged.stagingId}`),
-    reminder: withTruncationNote(
-      diff,
-      "ADR \u306E\u8FFD\u52A0\u30FB\u72B6\u614B\u5909\u66F4\u306F\u8A2D\u8A08\u5224\u65AD\u306E\u5BA3\u8A00\u3067\u3042\u308B\u3002diff \u3092\u5168\u6587\u63D0\u793A\u3057\u3066\u627F\u8A8D\u3092\u5F97\u308B\u307E\u3067 commit-architecture \u3092\u5B9F\u884C\u3057\u306A\u3044\u3053\u3068\u3002"
-    )
-  });
-}
-function runStageGotcha(ctx) {
-  const command = "stage-gotcha";
-  const input = loadInputJson(ctx.flags);
-  if (!input.ok) {
-    emitWriteFailure(
-      command,
-      input.error,
-      input.message,
-      { valid: false },
-      EXIT_USAGE
-    );
-    return;
-  }
-  if (!isPlainObject4(input.value)) {
-    emitWriteFailure(
-      command,
-      "invalid_input",
-      `${input.source} \u306E\u30C8\u30C3\u30D7\u30EC\u30D9\u30EB\u306F { id, title?, task?, mistake?, cause?, countermeasure?, promotionCandidate?, reason? } \u306E\u30AA\u30D6\u30B8\u30A7\u30AF\u30C8\u3067\u3042\u308B\u5FC5\u8981\u304C\u3042\u308A\u307E\u3059\u3002`,
-      { valid: false },
-      EXIT_USAGE
-    );
-    return;
-  }
-  const config = loadConfig(ctx.cwd);
-  const file = readDocument(config.gotchasPath);
-  const failure = (error, message, extra = {}) => emitWriteFailure(command, error, message, {
-    valid: false,
-    stagingId: null,
-    path: config.gotchasPath,
-    warnings: config.warnings,
-    ...extra
-  });
-  if (!file.exists) {
-    failure("not_found", `${config.gotchasPath} \u304C\u5B58\u5728\u3057\u307E\u305B\u3093\u3002`);
-    return;
-  }
-  const rewrite = input.value;
-  let built;
-  try {
-    built = buildRewrittenText(file.text, rewrite);
-  } catch (error) {
-    if (error instanceof GotchaError) {
-      failure(error.code, error.message, { details: error.details });
-      return;
-    }
-    failure("internal_error", messageOf(error));
-    return;
-  }
-  const warnings = [...config.warnings, ...file.warnings, ...built.warnings];
-  noteWarnings(warnings);
-  const staged = createStaging({
-    projectRoot: config.docRoot,
-    kind: "gotchas",
-    targetPath: config.gotchasPath,
-    nextContent: built.text,
-    baseHash: file.hash,
-    meta: {
-      id: built.id,
-      changed: built.changed,
-      reason: typeof rewrite.reason === "string" ? rewrite.reason : null
-    }
-  });
-  if (!staged.ok) {
-    failure(staged.error, staged.reasons.join(" / "), { warnings });
-    return;
-  }
-  const diff = unifiedDiff(file.text, built.text, {
-    fromLabel: `${config.gotchasRelative} (\u73FE\u884C)`,
-    toLabel: `${config.gotchasRelative} (stage)`
-  });
-  emitResult(command, {
-    ok: true,
-    valid: true,
-    stagingId: staged.stagingId,
-    id: built.id,
-    changed: built.changed,
-    path: config.gotchasPath,
-    relative: config.gotchasRelative,
-    diff: diffPayload(diff, []),
-    expiresAt: new Date(staged.expiresAt).toISOString(),
-    warnings,
-    next: commandLine(`commit-gotchas --staging-id ${staged.stagingId}`),
-    reminder: withTruncationNote(
-      diff,
-      "diff \u3092\u5168\u6587\u63D0\u793A\u3057\u3066\u30E6\u30FC\u30B6\u30FC\u306E\u627F\u8A8D\u3092\u5F97\u308B\u307E\u3067 commit-gotchas \u3092\u5B9F\u884C\u3057\u306A\u3044\u3053\u3068\u3002CLI \u306F\u627F\u8A8D\u306E\u6709\u7121\u3092\u5224\u5B9A\u3067\u304D\u306A\u3044\u3002"
-    )
-  });
-}
 
 // src/cli/main.ts
-var READ_SUBCOMMANDS = /* @__PURE__ */ new Set([
-  "get",
-  "scan",
-  "diff-architecture",
-  "scan-adr-candidates",
-  "scan-gotcha-candidates"
-]);
+var READ_SUBCOMMANDS = /* @__PURE__ */ new Set(["get", "scan", "diff-architecture"]);
 var WRITE_SUBCOMMANDS = /* @__PURE__ */ new Set([
   "stage-architecture",
-  "stage-adr",
   "commit-architecture",
-  "stage-gotcha",
-  "commit-gotchas",
-  "init-gotchas",
-  "append-gotcha",
-  "tag-gotcha",
-  "shrink-adr-candidate",
-  "remove-gotcha-candidate",
   "link-claude-md"
-]);
-var FEATURE_GATES = /* @__PURE__ */ new Map([
-  ["stage-adr", "adr"],
-  ["shrink-adr-candidate", "adr"],
-  ["stage-gotcha", "gotchas"],
-  ["commit-gotchas", "gotchas"],
-  ["init-gotchas", "gotchas"],
-  ["append-gotcha", "gotchas"],
-  ["tag-gotcha", "gotchas"],
-  ["remove-gotcha-candidate", "gotchas"]
 ]);
 function emitUsage(command, message, exitCode) {
   emitResult(command, {
@@ -6096,7 +3249,7 @@ function emitUsage(command, message, exitCode) {
   for (const line of USAGE_LINES) note(line);
   process.exitCode = exitCode;
 }
-function main(argv, cwd = process.cwd(), env = process.env) {
+function main(argv, cwd = process.cwd()) {
   const { positionals, flags, errors } = parseArgs(argv);
   const subcommand = positionals[0];
   const isRead = subcommand !== void 0 && READ_SUBCOMMANDS.has(subcommand);
@@ -6118,13 +3271,7 @@ function main(argv, cwd = process.cwd(), env = process.env) {
     }
     return;
   }
-  const features = readFeatures(env);
-  const gate = FEATURE_GATES.get(subcommand);
-  if (gate !== void 0 && !features[gate]) {
-    emitFeatureDisabled(subcommand, gate);
-    return;
-  }
-  const ctx = { flags, cwd, features };
+  const ctx = { flags, cwd };
   try {
     switch (subcommand) {
       case "get":
@@ -6136,44 +3283,14 @@ function main(argv, cwd = process.cwd(), env = process.env) {
       case "diff-architecture":
         runDiffArchitecture(ctx);
         return;
-      case "scan-adr-candidates":
-        runScanAdrCandidates(ctx);
-        return;
-      case "scan-gotcha-candidates":
-        runScanGotchaCandidates(ctx);
-        return;
       case "link-claude-md":
         runLinkClaudeMd(ctx);
         return;
       case "stage-architecture":
         runStageArchitecture(ctx);
         return;
-      case "stage-adr":
-        runStageAdr(ctx);
-        return;
       case "commit-architecture":
         runCommitArchitecture(ctx);
-        return;
-      case "stage-gotcha":
-        runStageGotcha(ctx);
-        return;
-      case "commit-gotchas":
-        runCommitGotchas(ctx);
-        return;
-      case "init-gotchas":
-        runInitGotchas(ctx);
-        return;
-      case "append-gotcha":
-        runAppendGotcha(ctx);
-        return;
-      case "tag-gotcha":
-        runTagGotcha(ctx);
-        return;
-      case "shrink-adr-candidate":
-        runShrinkAdrCandidate(ctx);
-        return;
-      case "remove-gotcha-candidate":
-        runRemoveGotchaCandidate(ctx);
         return;
       default:
         emitUsage("metatron", `\u4E0D\u660E\u306A\u30B5\u30D6\u30B3\u30DE\u30F3\u30C9: ${subcommand}`, EXIT_USAGE);

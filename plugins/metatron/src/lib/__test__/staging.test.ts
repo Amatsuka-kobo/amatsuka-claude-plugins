@@ -489,10 +489,10 @@ test("保存先は OS の一時ディレクトリ配下で、プロジェクト�
   const root = mkProject()
   const staged = createStaging({
     projectRoot: root,
-    kind: "adr",
+    kind: "architecture",
     targetPath: docPath(root),
     nextContent: "本文\n",
-    meta: { assignedId: "ADR-004" }
+    meta: { note: "memo" }
   })
   expect(staged.ok).toBe(true)
   if (!staged.ok) return
@@ -511,8 +511,8 @@ test("保存先は OS の一時ディレクトリ配下で、プロジェクト�
   })
   expect(committed.ok).toBe(true)
   if (!committed.ok) return
-  expect(committed.kind).toBe("adr")
-  expect(committed.meta).toStrictEqual({ assignedId: "ADR-004" })
+  expect(committed.kind).toBe("architecture")
+  expect(committed.meta).toStrictEqual({ note: "memo" })
 })
 
 test("プロジェクトが違えば保存先ディレクトリが分かれ、id は衝突しない", () => {
@@ -697,16 +697,47 @@ test("T7c: expiresAt を先へ延ばして commit → tampered、期限切れを
   expect(fs.readFileSync(docPath(root), "utf8")).toBe("旧\n")
 })
 
+test("T7e: 廃止した kind(adr・gotchas)を持つレコードは読めないものとして扱われ、commit できない", () => {
+  for (const kind of ["adr", "gotchas"]) {
+    const root = mkProject()
+    writeDoc(root, "docs/ARCHITECTURE.md", "旧\n")
+    const staged = createStaging({
+      projectRoot: root,
+      kind: "architecture",
+      targetPath: docPath(root),
+      nextContent: "新\n"
+    })
+    expect(staged.ok).toBe(true)
+    if (!staged.ok) return
+
+    writeRecordJson(root, staged.stagingId, {
+      ...readRecordJson(root, staged.stagingId),
+      kind
+    })
+
+    const read = readStaging(root, staged.stagingId)
+    expect(read.ok, kind).toBe(false)
+    const committed = commitStaging({
+      projectRoot: root,
+      stagingId: staged.stagingId
+    })
+    expect(committed.ok, kind).toBe(false)
+    if (committed.ok) return
+    expect(committed.error, kind).toBe("unknown_id")
+    expect(fs.readFileSync(docPath(root), "utf8")).toBe("旧\n")
+  }
+})
+
 test("T7d: 改変していない staging は従来どおり commit でき、消費の印も残る", () => {
   const root = mkProject()
   writeDoc(root, "docs/ARCHITECTURE.md", "旧\n")
 
   const staged = createStaging({
     projectRoot: root,
-    kind: "adr",
+    kind: "architecture",
     targetPath: docPath(root),
     nextContent: "新\n",
-    meta: { assignedId: "ADR-004", nested: { b: 1, a: [1, 2, { z: true }] } }
+    meta: { note: "memo", nested: { b: 1, a: [1, 2, { z: true }] } }
   })
   expect(staged.ok).toBe(true)
   if (!staged.ok) return
@@ -719,7 +750,7 @@ test("T7d: 改変していない staging は従来どおり commit でき、消�
   if (!committed.ok) return
   expect(committed.warnings).toStrictEqual([])
   expect(committed.meta).toStrictEqual({
-    assignedId: "ADR-004",
+    note: "memo",
     nested: { b: 1, a: [1, 2, { z: true }] }
   })
   expect(fs.readFileSync(docPath(root), "utf8")).toBe("新\n")

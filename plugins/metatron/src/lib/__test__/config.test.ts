@@ -9,7 +9,6 @@ import path from "node:path"
 import { afterAll, expect, test } from "vitest"
 import {
   DEFAULT_ARCHITECTURE_PATH,
-  DEFAULT_GOTCHAS_PATH,
   findDocRoot,
   loadConfig
 } from "../config.js"
@@ -65,11 +64,9 @@ test("C1: 設定ファイル無し → 全項目が既定値", () => {
 
   expect(cfg.configExists).toBe(false)
   expect(cfg.architectureRelative).toBe(DEFAULT_ARCHITECTURE_PATH)
-  expect(cfg.gotchasRelative).toBe(DEFAULT_GOTCHAS_PATH)
   expect(cfg.architecturePath).toBe(
     path.join(cfg.docRoot, "docs", "ARCHITECTURE.md")
   )
-  expect(cfg.gotchasPath).toBe(path.join(cfg.docRoot, "docs", "GOTCHAS.md"))
   // 「設定ファイルが無い」は正常な状態であり、警告にしない
   expect(cfg.warnings).toStrictEqual([])
 })
@@ -86,7 +83,6 @@ test("C2: paths のみ指定 → 指定分だけ上書き、他は既定値", ()
   expect(cfg.configExists).toBe(true)
   expect(cfg.architectureRelative).toBe("documents/ARCH.md")
   expect(cfg.architecturePath).toBe(path.join(dir, "documents", "ARCH.md"))
-  expect(cfg.gotchasRelative).toBe(DEFAULT_GOTCHAS_PATH)
   expect(cfg.warnings).toStrictEqual([])
 })
 
@@ -98,7 +94,6 @@ test("C3: 壊れた JSON → 既定値 + 警告、例外を投げない", () => 
   expect(cfg.docRoot).toBe(dir)
   expect(cfg.configExists).toBe(true)
   expect(cfg.architectureRelative).toBe(DEFAULT_ARCHITECTURE_PATH)
-  expect(cfg.gotchasRelative).toBe(DEFAULT_GOTCHAS_PATH)
   expect(cfg.warnings.length).toBeGreaterThanOrEqual(1)
 })
 
@@ -106,12 +101,11 @@ test("C4: 未知の version → 全項目既定値 + 警告", () => {
   const dir = mkTmp()
   writeConfig(dir, {
     version: 99,
-    paths: { architecture: "documents/ARCH.md", gotchas: "documents/G.md" }
+    paths: { architecture: "documents/ARCH.md" }
   })
   const cfg = loadConfig(dir)
 
   expect(cfg.architectureRelative).toBe(DEFAULT_ARCHITECTURE_PATH)
-  expect(cfg.gotchasRelative).toBe(DEFAULT_GOTCHAS_PATH)
   expect(cfg.warnings.filter((w) => w.includes("version"))).toHaveLength(1)
 })
 
@@ -119,27 +113,45 @@ test("C5: 絶対パス指定 → 拒否され既定値、理由を返す", () =>
   const dir = mkTmp()
   writeConfig(dir, {
     version: 1,
-    paths: { architecture: "/etc/ARCHITECTURE.md", gotchas: "docs/G.md" }
+    paths: { architecture: "/etc/ARCHITECTURE.md" }
   })
   const cfg = loadConfig(dir)
 
   expect(cfg.architectureRelative).toBe(DEFAULT_ARCHITECTURE_PATH)
   expect(cfg.architecturePath).toBe(path.join(dir, "docs", "ARCHITECTURE.md"))
-  // 拒否は項目単位。gotchas は生き残る
-  expect(cfg.gotchasRelative).toBe("docs/G.md")
-  expect(cfg.warnings.some((w) => w.includes("絶対パス"))).toBe(true)
+  // 拒否された項目は警告 1 行になる
+  expect(cfg.warnings).toHaveLength(1)
+  expect(cfg.warnings[0]).toContain("絶対パス")
+})
+
+test("C5b: ドライブレターと UNC の絶対パスも拒否され既定値、理由を返す", () => {
+  for (const architecture of [
+    "C:/ARCHITECTURE.md",
+    "C:\\ARCHITECTURE.md",
+    "//server/share/ARCHITECTURE.md",
+    "\\\\server\\share\\ARCHITECTURE.md"
+  ]) {
+    const dir = mkTmp()
+    writeConfig(dir, { version: 1, paths: { architecture } })
+    const cfg = loadConfig(dir)
+    expect(cfg.architectureRelative, architecture).toBe(
+      DEFAULT_ARCHITECTURE_PATH
+    )
+    expect(cfg.warnings, architecture).toHaveLength(1)
+    expect(cfg.warnings[0], architecture).toContain("絶対パス")
+  }
 })
 
 test("C6: ../ でルート外を指す → 拒否され既定値、理由を返す", () => {
   const dir = mkTmp()
   writeConfig(dir, {
     version: 1,
-    paths: { gotchas: "../outside/GOTCHAS.md" }
+    paths: { architecture: "../outside/ARCHITECTURE.md" }
   })
   const cfg = loadConfig(dir)
 
-  expect(cfg.gotchasRelative).toBe(DEFAULT_GOTCHAS_PATH)
-  expect(cfg.gotchasPath).toBe(path.join(dir, "docs", "GOTCHAS.md"))
+  expect(cfg.architectureRelative).toBe(DEFAULT_ARCHITECTURE_PATH)
+  expect(cfg.architecturePath).toBe(path.join(dir, "docs", "ARCHITECTURE.md"))
   expect(cfg.warnings.some((w) => w.includes("ルート外"))).toBe(true)
 })
 
@@ -202,8 +214,20 @@ test("C11: $schema キーを含む設定 → 未知キーとして無視され�
   const cfg = loadConfig(dir)
 
   expect(cfg.architectureRelative).toBe("docs/A.md")
-  expect(cfg.gotchasRelative).toBe(DEFAULT_GOTCHAS_PATH)
   expect(cfg.warnings).toStrictEqual([])
+})
+
+test("C14: 廃止した paths.gotchas は未知キーとして警告なしで無視される", () => {
+  const dir = mkTmp()
+  writeConfig(dir, {
+    version: 1,
+    paths: { architecture: "docs/A.md", gotchas: "docs/G.md" }
+  })
+  const cfg = loadConfig(dir)
+
+  expect(cfg.architectureRelative).toBe("docs/A.md")
+  expect(cfg.warnings).toHaveLength(0)
+  expect("gotchasRelative" in cfg).toBe(false)
 })
 
 test("C12: 旧キー injection は無視し、警告も出さない", () => {
@@ -280,6 +304,15 @@ test("R4-d: ネストした git リポジトリ → 内側のリポジトリル�
   expect(findDocRoot(sub)).toBe(inner)
 })
 
+test("R4-h: git 管理外のワークスペースの直下の設定ファイルは、その中のリポジトリから拾わない", () => {
+  const ws = mkTmp()
+  writeConfig(ws, { version: 1 })
+  const repo = mkSub(ws, "repo")
+  gitInit(repo)
+  const sub = mkSub(repo, "sub")
+  expect(findDocRoot(sub)).toBe(repo)
+})
+
 test("R4-g: 親の設定ファイルは git の境界を越えて拾わない(親の中に置いた worktree)", () => {
   const outer = mkTmp()
   gitInit(outer)
@@ -310,11 +343,11 @@ test("R4-f: Windows 形式の区切りでのルート脱出も拒否される", 
   const dir = mkTmp()
   writeConfig(dir, {
     version: 1,
-    paths: { gotchas: "..\\outside\\GOTCHAS.md" }
+    paths: { architecture: "..\\outside\\ARCHITECTURE.md" }
   })
   const cfg = loadConfig(dir)
 
-  expect(cfg.gotchasRelative).toBe(DEFAULT_GOTCHAS_PATH)
+  expect(cfg.architectureRelative).toBe(DEFAULT_ARCHITECTURE_PATH)
   expect(cfg.warnings.some((w) => w.includes("ルート外"))).toBe(true)
 })
 
@@ -332,7 +365,7 @@ test("トップレベルが null の JSON も壊れた JSON として扱う", ()
   writeConfig(dir, "null")
   const cfg = loadConfig(dir)
 
-  expect(cfg.gotchasRelative).toBe(DEFAULT_GOTCHAS_PATH)
+  expect(cfg.architectureRelative).toBe(DEFAULT_ARCHITECTURE_PATH)
   expect(cfg.warnings.length).toBeGreaterThanOrEqual(1)
 })
 
@@ -340,12 +373,11 @@ test("個別キーの型不整合はその項目だけ既定値に落ちる", ()
   const dir = mkTmp()
   writeConfig(dir, {
     version: 1,
-    paths: { architecture: 42, gotchas: "docs/G.md" }
+    paths: { architecture: 42 }
   })
   const cfg = loadConfig(dir)
 
   expect(cfg.architectureRelative).toBe(DEFAULT_ARCHITECTURE_PATH)
-  expect(cfg.gotchasRelative).toBe("docs/G.md")
   expect(cfg.warnings).toHaveLength(1)
 })
 
@@ -362,4 +394,86 @@ test("存在しない開始ディレクトリでも例外を投げない", () =>
   const dir = path.join(mkTmp(), "no", "such", "dir")
   expect(() => loadConfig(dir)).not.toThrow()
   expect(loadConfig(dir).architectureRelative).toBe(DEFAULT_ARCHITECTURE_PATH)
+})
+
+// git を実行できない環境を作る。PATH を空にすると spawnSync("git") が失敗する。
+function withoutGit<T>(fn: () => T): T {
+  const saved = process.env.PATH
+  process.env.PATH = ""
+  try {
+    return fn()
+  } finally {
+    process.env.PATH = saved
+  }
+}
+
+// 呼ばれたら印を残して失敗する偽の git を PATH の先頭に置き、git が呼ばれたかを返す。
+function gitCalledDuring(fn: () => void): boolean {
+  const bin = fs.mkdtempSync(path.join(os.tmpdir(), "fake-git-"))
+  const marker = path.join(bin, "called")
+  fs.writeFileSync(
+    path.join(bin, "git"),
+    `#!/bin/sh\necho called > "${marker}"\nexit 128\n`,
+    { mode: 0o755 }
+  )
+  const saved = process.env.PATH
+  process.env.PATH = bin
+  try {
+    fn()
+    return fs.existsSync(marker)
+  } finally {
+    process.env.PATH = saved
+    fs.rmSync(bin, { recursive: true, force: true })
+  }
+}
+
+test("R1-g0: PATH を空にすると git を起動できない(以降のテストの前提)", () => {
+  const res = withoutGit(() => spawnSync("git", ["--version"]))
+  expect(res.error).toBeDefined()
+})
+
+test("R1-g1b: 開始ディレクトリに設定があれば git を呼ばない。無ければ呼ぶ", () => {
+  const dir = mkTmp()
+  const sub = mkSub(dir, "pkg")
+  writeConfig(sub, { version: 1 })
+  expect(gitCalledDuring(() => findDocRoot(sub))).toBe(false)
+  const other = mkSub(dir, "other")
+  expect(gitCalledDuring(() => findDocRoot(other))).toBe(true)
+})
+
+test("R1-g2b: 境界は git の toplevel ではなく .git から決まる(git を実行できないとき)", () => {
+  const outer = mkTmp()
+  writeConfig(outer, { version: 1 })
+  const repo = mkSub(outer, "repo")
+  gitInit(repo)
+  const start = mkSub(repo, "src")
+  // git が使えれば段 2 の toplevel を返す
+  expect(findDocRoot(start)).toBe(repo)
+  // git を実行できなければ .git で打ち切り、段 3 の開始ディレクトリを返す
+  expect(withoutGit(() => findDocRoot(start))).toBe(start)
+})
+
+test("R1-g1: 開始ディレクトリに設定があれば、git を実行できなくてもそこを返す", () => {
+  const dir = mkTmp()
+  gitInit(dir)
+  const sub = mkSub(dir, "pkg")
+  writeConfig(sub, { version: 1 })
+  expect(withoutGit(() => findDocRoot(sub))).toBe(sub)
+})
+
+test("R1-g2: git を実行できないときは .git を持つディレクトリで探索を打ち切る", () => {
+  const outer = mkTmp()
+  writeConfig(outer, { version: 1 })
+  const wt = mkSub(outer, "worktrees", "wt")
+  // worktree の .git はファイルである
+  fs.writeFileSync(path.join(wt, ".git"), "gitdir: /nonexistent\n")
+  const start = mkSub(wt, "src")
+  expect(withoutGit(() => findDocRoot(start))).toBe(start)
+})
+
+test("R1-g3: git も .git も無ければファイルシステムのルートまで辿る", () => {
+  const outer = mkTmp()
+  writeConfig(outer, { version: 1 })
+  const start = mkSub(outer, "a", "b")
+  expect(withoutGit(() => findDocRoot(start))).toBe(outer)
 })

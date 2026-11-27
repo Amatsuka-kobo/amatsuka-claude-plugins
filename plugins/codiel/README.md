@@ -24,14 +24,16 @@ Claude Code 本体はネイティブバイナリで配布され Node.js を同�
 などの不足分が追記されます。内部では `initializing-harness` スキルの手順に従います。
 
 Codiel は単体で完結します。技術スタック・レイヤー構造・規約・既知の落とし穴といった、より豊かな
-前提をプロジェクトに持たせたい場合は、ARCHITECTURE / GOTCHAS を専門に扱う metatron の併用を
-検討してください。ARCHITECTURE と GOTCHAS は metatron の資産で、読み方と記録の仕方は metatron が伝えます。
+前提をプロジェクトに持たせたい場合は、ARCHITECTURE を専門に扱う metatron の併用を
+検討してください。ARCHITECTURE は metatron の資産で、読み方と更新の仕方は metatron が伝えます。
 Codiel が使うのは、ARCHITECTURE のドメインマップ(ドメインごとの境界の判定に使う)と、review で
 ARCHITECTURE と実装の食い違いを見ることの 2 つだけです。パスは `metatron.config.json` で変更できます。
-Codiel 自身は失敗を GOTCHAS へ記録しません。
 
 Codiel は `docs/intents/domains/` に持続層を持ちます。領域ごとに 1 ファイルで、intent をまたいで効き続ける
-意図的な制約と、run で起きた失敗の記録を蓄積します。
+意図的な制約と、run で起きた失敗の記録を蓄積します。intent-sync は、今回の run の変更で古くなった
+目的・意図的な制約・非ゴール・失敗の記録を洗い出し、記述ごとに改訂か削除の案を示します。承認された案だけを
+書き、追加の取り込みと同じコミットに入れます。改訂・削除した記述の見出しは領域ファイルの `## 由来` に残り、
+古い文面は git の履歴で読めます。箇条書きへの移行を断ったセクションには、次の run が同じ案を出しません。run が触れない領域は見直しません。
 
 Codiel は `docs/intents/design/` にも持続層を持ちます。run で決まった設計を、データモデル(`data-model.md`)・API 一覧(`api.md`)・画面遷移(`screen-flow.md`)・システム構成(`architecture.md`)・シーケンス(`sequence.md`)・非機能要件(`nfr.md`)の種別ごとに 1 ファイルで残します。intent-sync でオーケストレーターが run の差分から今の姿を書き、図は Mermaid で描き、ゲートを通った直後にコミットします。ファイルは、その種別に当たる変更を初めて含んだ run で作られ、当たる変更を含まない run では更新されません。
 
@@ -252,7 +254,7 @@ Claude Code は MCP の呼び出しが 120 秒を超えるとバックグラウ�
 
 ### 撤去した設定キーは警告付きで無視される
 
-LLM パネルと重さ判定の撤去(ADR-012)で、`judge`・`weight`・`panel` の全体と `contextJudge.enabled` は廃止しました。`.codiel/config.json` に残っていても、読み込みエラーにはならず、無視されます。評価のたびに、無視したキーを並べた警告が `reasons` に 1 件出るので、設定から削除してください。
+LLM パネルと重さ判定の撤去(設計書 `harness-docs/design/2026-10-01-codiel-run-speedup-design.md`)で、`judge`・`weight`・`panel` の全体と `contextJudge.enabled` は廃止しました。`.codiel/config.json` に残っていても、読み込みエラーにはならず、無視されます。評価のたびに、無視したキーを並べた警告が `reasons` に 1 件出るので、設定から削除してください。
 
 ### 保護パスの既定の除外と生成物の宣言は、使い終えたら戻す
 

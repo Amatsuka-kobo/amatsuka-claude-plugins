@@ -17,8 +17,7 @@
 {
   "version": 1,
   "paths": {
-    "architecture": "docs/ARCHITECTURE.md",
-    "gotchas": "docs/GOTCHAS.md"
+    "architecture": "docs/ARCHITECTURE.md"
   }
 }
 ```
@@ -27,9 +26,8 @@
 | --- | --- | --- | --- |
 | `version` | number | `1` | スキーマバージョン |
 | `paths.architecture` | string | `docs/ARCHITECTURE.md` | ARCHITECTURE のパス |
-| `paths.gotchas` | string | `docs/GOTCHAS.md` | GOTCHAS のパス |
 
-未知キーは無視する。`$schema` が書かれていても未知キーとして無視する。この規則により、`paths` にキーを足しても、そのキーを知らない他プラグインの config 実装は追随を要さない。
+未知キーは無視する。`$schema` が書かれていても未知キーとして無視する。廃止したキーの `paths.gotchas` も未知キーと同じく、警告を出さずに無視する。この規則により、`paths` にキーを足しても、そのキーを知らない他プラグインの config 実装は追随を要さない。
 
 ## 壊れた設定の扱い
 
@@ -48,7 +46,7 @@
 
 開始ディレクトリから上方向に探索し、最初に見つかったものを `docRoot` とする。
 
-1. `metatron.config.json` を持つ最も近い祖先ディレクトリ
+1. `metatron.config.json` を持つ最も近い祖先ディレクトリ(git の toplevel まで。toplevel より上は見ない)
 2. 無ければ `git rev-parse --show-toplevel` の出力
 3. それも無ければ開始ディレクトリ
 
@@ -57,14 +55,17 @@
 - 開始ディレクトリは、引数が与えられていればその値、無ければ `process.cwd()` とする。
 - 探索を始める前に、開始ディレクトリを `fs.realpathSync` で実体パスへ解決する。解決できないときは解決前のパスをそのまま使う。
 - 探索は開始ディレクトリ自身を候補に含める。真の親から始めない。
+- 開始ディレクトリに `metatron.config.json` があれば、git を実行せずにそこを `docRoot` とする。
 - 段 1 の探索は、段 2 の git の toplevel に達したら打ち切る。toplevel 自身は候補に含める。git 管理外なら、ファイルシステムのルートに達したら打ち切る。親リポジトリの中に置いた worktree が、親の設定ファイルを拾わないためである。
+- リポジトリの外(ワークスペースの直下など)に置いた設定ファイルと、ネストした独立リポジトリの外側に置いた設定ファイルは拾わない。設定ファイルは、文書を置くリポジトリの中に置く。
+- git の実行が失敗したときは、段 1 の探索を、`.git`(ディレクトリかファイル)を持つディレクトリに達したところで打ち切る。そのディレクトリ自身は候補に含める。
 - 段 2 は必ず `git rev-parse --show-toplevel` を実行して得る。`.git` の祖先探索で代替しない。
 - git の実行が失敗したときは、原因を区別せず段 3 へ進む。git 未インストール・git 管理外・その他の非 0 終了・タイムアウトのいずれも「無かった」として扱い、例外を外へ投げない。
 - 解決結果はキャッシュしない。呼ばれるたびに解決し直す。
 
 ## パス解決
 
-- `paths.architecture` / `paths.gotchas` は `docRoot` からの相対パスとして解決する。
+- `paths.architecture` は `docRoot` からの相対パスとして解決する。
 - 判定の前に区切り文字を `/` へ正規化する。
 - 絶対パスは拒否する。POSIX の先頭 `/`、Windows のドライブレター、UNC のいずれも絶対パスとみなす。
 - `..` で `docRoot` の外へ出るパスは拒否する。`docRoot` 自身を指すパスも拒否する。
@@ -76,8 +77,7 @@
 | 文書 | 既定パス | 基準 |
 | --- | --- | --- |
 | ARCHITECTURE | `docs/ARCHITECTURE.md` | `docRoot`。設定で変更できる |
-| GOTCHAS | `docs/GOTCHAS.md` | `docRoot`。設定で変更できる |
 | intent 文書 | `docs/intents/YYYY-MM-DD-<slug>.md` | `repoRoot`(git ルート)。設定を持たない |
 | 持続層 | `docs/intents/domains/<領域>.md` | `repoRoot`(git ルート)。設定を持たない。置き場の正本は codiel `references/intent-format.md` |
 
-ARCHITECTURE と GOTCHAS のパスを固定と前提にしない。参照するときは `get config` の出力から取る。
+ARCHITECTURE のパスを固定と前提にしない。参照するときは `get config` の出力から取る。

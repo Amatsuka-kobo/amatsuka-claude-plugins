@@ -18,7 +18,6 @@ export const CONFIG_FILENAME = "metatron.config.json"
 export const SUPPORTED_VERSION = 1
 
 export const DEFAULT_ARCHITECTURE_PATH = "docs/ARCHITECTURE.md"
-export const DEFAULT_GOTCHAS_PATH = "docs/GOTCHAS.md"
 
 export interface ResolvedConfig {
   /** 契約 §3 規則 1 で解決したルート(絶対パス)。 */
@@ -29,12 +28,8 @@ export interface ResolvedConfig {
   configExists: boolean
   /** ARCHITECTURE の絶対パス。 */
   architecturePath: string
-  /** GOTCHAS の絶対パス。 */
-  gotchasPath: string
   /** ARCHITECTURE の docRoot からの相対パス(区切りは常に "/")。 */
   architectureRelative: string
-  /** GOTCHAS の docRoot からの相対パス(区切りは常に "/")。 */
-  gotchasRelative: string
   /** 既定値へ落とした理由・設定を読めなかった理由。空配列が正常。 */
   warnings: string[]
 }
@@ -57,6 +52,15 @@ function realpathOrSelf(dir: string): string {
 function hasConfigFile(dir: string): boolean {
   try {
     return fs.existsSync(path.join(dir, CONFIG_FILENAME))
+  } catch {
+    return false
+  }
+}
+
+// git を実行できないときの境界。worktree の `.git` はファイルなので、種別を問わない。
+function existsGit(dir: string): boolean {
+  try {
+    return fs.existsSync(path.join(dir, ".git"))
   } catch {
     return false
   }
@@ -87,7 +91,8 @@ function gitToplevel(cwd: string): string | null {
 /**
  * 契約 §3 規則 1: ルート解決。
  *
- * 1. `metatron.config.json` を持つ最も近い祖先ディレクトリ(開始ディレクトリ自身を含む)
+ * 1. `metatron.config.json` を持つ最も近い祖先ディレクトリ(開始ディレクトリ自身を含み、git の
+ *    toplevel より上は見ない)
  * 2. 無ければ `git rev-parse --show-toplevel`
  * 3. それも無ければ開始ディレクトリ
  *
@@ -97,18 +102,24 @@ function gitToplevel(cwd: string): string | null {
  *
  * 段 1 の探索は git の toplevel(段 2 の値)で打ち切る。親リポジトリの中に置いた
  * worktree が、親の設定ファイルを拾って親の文書を docRoot にしないためである。
+ * リポジトリの外に置いた設定ファイルは拾わない。
+ * git を実行できないときは、`.git`(ディレクトリかファイル)を持つディレクトリを境界にする。
+ * 開始ディレクトリに設定ファイルがあれば、git を実行せずにそこを返す。
  */
 export function findDocRoot(startDir?: string): string {
   const start = realpathOrSelf(path.resolve(startDir ?? process.cwd()))
 
+  // 段 1 の最初の候補で決まるときは git を実行しない。
+  if (hasConfigFile(start)) return start
+
   const top = gitToplevel(start)
 
-  // 段 1: 開始ディレクトリ自身を候補に含める(inclusive)。git の toplevel 自身も候補に含め、
-  // その先へは進まない。git 管理外ならファイルシステムのルートまで辿る。
+  // 段 1: 開始ディレクトリから祖先を辿る。git の toplevel 自身も候補に含め、その先へは
+  // 進まない。git を実行できないときは `.git` を持つディレクトリで打ち切る。
   let dir = start
   while (true) {
     if (hasConfigFile(dir)) return dir
-    if (top && dir === top) break
+    if (top ? dir === top : existsGit(dir)) break
     const parent = path.dirname(dir)
     // ファイルシステムのルートに達したら打ち切る。
     if (parent === dir) break
@@ -201,9 +212,7 @@ function defaultsFor(docRoot: string, warnings: string[]): ResolvedConfig {
     configPath: path.join(docRoot, CONFIG_FILENAME),
     configExists: false,
     architecturePath: path.resolve(docRoot, DEFAULT_ARCHITECTURE_PATH),
-    gotchasPath: path.resolve(docRoot, DEFAULT_GOTCHAS_PATH),
     architectureRelative: DEFAULT_ARCHITECTURE_PATH,
-    gotchasRelative: DEFAULT_GOTCHAS_PATH,
     warnings
   }
 }
@@ -266,23 +275,13 @@ function loadConfigInner(startDir?: string): ResolvedConfig {
     "architecture",
     warnings
   )
-  const gotchas = resolveConfiguredPath(
-    docRoot,
-    paths?.gotchas,
-    DEFAULT_GOTCHAS_PATH,
-    "gotchas",
-    warnings
-  )
-
-  // 未知キー($schema を含む)は無視する。エラーにしない(契約 §2)。
+  // 未知キー($schema と、廃止した paths.gotchas を含む)は無視する。エラーにしない(契約 §2)。
   return {
     docRoot,
     configPath,
     configExists,
     architecturePath: architecture.absolute,
-    gotchasPath: gotchas.absolute,
     architectureRelative: architecture.relative,
-    gotchasRelative: gotchas.relative,
     warnings
   }
 }

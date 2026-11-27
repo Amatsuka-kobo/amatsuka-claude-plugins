@@ -23,15 +23,15 @@ export const STAGING_DIR_NAME = "metatron-staging"
 // 2: レコードへ recordHash を追加した(改竄検知。computeRecordHash のコメントを見よ)。
 export const STAGING_RECORD_VERSION = 2
 
-/** 契約 §11: staging は単回使用かつ有効期限つき(既定 30 分)。 */
+/** 契約 §12: staging は単回使用かつ有効期限つき(既定 30 分)。 */
 export const DEFAULT_STAGING_TTL_MS = 30 * 60 * 1000
 
 /**
- * stage の対象。`architecture` と `adr` は ARCHITECTURE ファイルを書き換える経路である。
- * `gotchas` は GOTCHAS 台帳の既存エントリのフィールドを書き換える経路である。
- * いずれも 1 つの staging が書き換えるファイルは 1 本だけである(契約 §11)。
+ * stage の対象。`architecture` は ARCHITECTURE ファイルを書き換える経路である。
+ * 1 つの staging が書き換えるファイルは 1 本だけである(契約 §12)。
+ * 廃止した `adr`・`gotchas` の staging は読めないレコードとして扱う。
  */
-export type StagingKind = "architecture" | "adr" | "gotchas"
+export type StagingKind = "architecture"
 
 export interface StagingRecord {
   version: number
@@ -47,7 +47,7 @@ export interface StagingRecord {
   expiresAt: number
   /** 消費済みなら消費時刻。未消費は null。 */
   usedAt: number | null
-  /** 呼び出し元が持たせる付随情報(ADR の assignedId など)。 */
+  /** 呼び出し元が持たせる付随情報。 */
   meta: Record<string, unknown>
   /**
    * recordHash 以外の全フィールドから算出した、このレコード自身の内容ハッシュ。
@@ -162,7 +162,7 @@ export function hashFileOrNull(filePath: string): string | null {
   }
 }
 
-// プロジェクトパスの分離キー。sha256 の先頭 16 文字(契約 §11)。
+// プロジェクトパスの分離キー。sha256 の先頭 16 文字(契約 §12)。
 export function projectKey(projectRoot: string): string {
   let resolved: string
   try {
@@ -218,7 +218,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 function isStagingKind(value: unknown): value is StagingKind {
-  return value === "architecture" || value === "adr" || value === "gotchas"
+  return value === "architecture"
 }
 
 // キー順に依存しない表現へ落とす。オブジェクトのキーを再帰的に並べ替える。
@@ -302,7 +302,7 @@ function parseRecord(raw: unknown, stagingId: string): StagingRecord | null {
   }
 }
 
-// 破損・欠落・ディレクトリごとの消失は、いずれも「未知の ID」に落とす(契約 §11)。
+// 破損・欠落・ディレクトリごとの消失は、いずれも「未知の ID」に落とす(契約 §12)。
 function loadRecord(
   projectRoot: string,
   stagingId: string
@@ -338,7 +338,7 @@ function writeRecord(recordPath: string, record: StagingRecord): void {
 }
 
 /**
- * staging を発行する。契約 §11 の保証 1・2 を成立させる入口。
+ * staging を発行する。契約 §12 の保証 1・2 を成立させる入口。
  *
  * `validationErrors` が空でない場合は stagingId を発行しない
  * (壊れた内容は stage すらできない。設計書 §7-4)。
@@ -436,13 +436,13 @@ export function readStaging(
 }
 
 /**
- * staging を消費して書き込む。契約 §11 の保証 1〜3 の照合点。
+ * staging を消費して書き込む。契約 §12 の保証 1〜3 の照合点。
  *
  * 判定の順序は unknown_id → tampered → already_used → expired → file_changed。
  *
  * **消費済みの印は書き込みの前に付ける。** 印の保存に失敗したら書き込みへ進まず
  * `staging_unavailable` を返す。以前は書き込みの後に印を付け、失敗しても警告付きで
- * 成功を返していたが、これは契約 §11 の保証 2(単回使用)を破る。印が付かないまま
+ * 成功を返していたが、これは契約 §12 の保証 2(単回使用)を破る。印が付かないまま
  * 落ちた staging は未使用のまま残り、**変更前後が同一の stage(no-op)では対象ファイルの
  * ハッシュも変わらない**ため、`file_changed` の歯止めが効かず何度でも commit できてしまう。
  *
@@ -453,7 +453,7 @@ export function readStaging(
  * 消費の印を書き戻す巻き戻しは行わない。巻き戻し自体が同じ理由で失敗しうるうえ、
  * 「印が付いていない staging が存在しうる」状態を残すと保証が条件付きに戻る。
  *
- * ロック(契約 §11「採番と挿入の原子性」)はこの関数の外側で取る。
+ * ロック(契約 §12「書き込みの排他」)はこの関数の外側で取る。
  */
 export function commitStaging(input: CommitStagingInput): CommitStagingResult {
   const projectRoot = path.resolve(input.projectRoot)

@@ -12,7 +12,6 @@ import path from "node:path";
 var DOC_CONFIG_FILENAME = "metatron.config.json";
 var DOC_CONFIG_SUPPORTED_VERSION = 1;
 var DEFAULT_ARCHITECTURE_PATH = "docs/ARCHITECTURE.md";
-var DEFAULT_GOTCHAS_PATH = "docs/GOTCHAS.md";
 function isPlainObject(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -29,6 +28,12 @@ function existsSafe(target) {
   } catch {
     return false;
   }
+}
+function hasDocConfig(dir) {
+  return existsSafe(path.join(dir, DOC_CONFIG_FILENAME));
+}
+function existsGit(dir) {
+  return existsSafe(path.join(dir, ".git"));
 }
 function gitToplevel(cwd) {
   try {
@@ -48,11 +53,12 @@ function gitToplevel(cwd) {
 }
 function findDocRoot(startDir2) {
   const start = realpathOrSelf(path.resolve(startDir2 ?? process.cwd()));
+  if (hasDocConfig(start)) return start;
   const top = gitToplevel(start);
   let dir = start;
   while (true) {
-    if (existsSafe(path.join(dir, DOC_CONFIG_FILENAME))) return dir;
-    if (top && dir === top) break;
+    if (hasDocConfig(dir)) return dir;
+    if (top ? dir === top : existsGit(dir)) break;
     const parent = path.dirname(dir);
     if (parent === dir) break;
     dir = parent;
@@ -156,13 +162,6 @@ function resolveDocPaths(startDir2) {
       paths?.architecture,
       DEFAULT_ARCHITECTURE_PATH,
       "architecture",
-      warnings
-    ),
-    gotchas: resolveConfiguredPath(
-      docRoot2,
-      paths?.gotchas,
-      DEFAULT_GOTCHAS_PATH,
-      "gotchas",
       warnings
     ),
     warnings
@@ -412,7 +411,6 @@ if (tplDir) {
 var docPaths = resolveDocPaths(startDir);
 var docRoot = docPaths.docRoot;
 var architecturePath = isFile(docPaths.architecture) ? docPaths.architecture : null;
-var gotchasPath = isFile(docPaths.gotchas) ? docPaths.gotchas : null;
 var metatronConfig = isFile(path2.join(docRoot, DOC_CONFIG_FILENAME));
 var domains = readDomainsResult(startDir);
 var configWarnings = [...docPaths.warnings, ...domains.warnings];
@@ -475,7 +473,6 @@ console.log(
       configWarnings,
       projectDocs: {
         architecture: architecturePath,
-        gotchas: gotchasPath,
         metatronConfig,
         domainsReadable: domains.domains !== null,
         domainCount: domains.domains ? Object.keys(domains.domains).length : 0

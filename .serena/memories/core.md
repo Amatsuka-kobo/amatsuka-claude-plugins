@@ -42,9 +42,9 @@ Human-read material stays in `docs/`; AI-read material moved to `harness-docs/`.
 
 - `docs/` now holds only: `chat/` (session archive), `development/cliproxyapi-setup.md`,
   `agents-{claude-only,with-codex}-old.md`, `ONBOARDING.md` (**moved down from the repo root**), and
-  `old/` — the retirement shelf, currently `old/mdbase-record/` and `old/optimize-agents-record/`.
+  `old/` — the retirement shelf, currently `old/mdbase-record/`, `old/optimize-agents-record/` and `old/metatron/` (the ADR list `ADR.md` and the GOTCHAS ledger `GOTCHAS.md`, moved 2026-11-27, PR #66; AI does not read them, and memory references to ADR-NNN / GOTCHA-NNN point there).
 - `harness-docs/ARCHITECTURE.md` is the repository's technical source of truth. The directory also
-  holds `design/` (25 files), `plans/` (14), `handover/`, and `superpowers/{specs,plans}` — every
+  holds `design/` (72 files), `plans/` (46), `handover/`, and `superpowers/{specs,plans}` — every
   design specification and implementation plan. Its documentation-operation facts supersede the
   former root `CLAUDE.md` text. `design/2026-08-16-file-contract-freeze.md` は設計書ではなく
   metatron / codiel / gh-utility が実装中に直接読む**凍結された契約**である(2026-09-27 の codiel への統合に伴う上書きは
@@ -63,30 +63,30 @@ Human-read material stays in `docs/`; AI-read material moved to `harness-docs/`.
 
 ## Distributed plugins (14 incl. better-agentics since 2026-10-26, see `.claude-plugin/marketplace.json`)
 
-Only **pitcrew (0.10.2)** and **chat-history (0.7.0)** are released; every other plugin is `-dev`.
-Manifest and sibling `package.json` versions were all in sync as of 2026-08-24.
+Only **codiel (1.1.7)** and **chat-history (0.8.5)** are released; every other plugin is `-dev`.
+Manifest and sibling `package.json` versions were all in sync as of 2026-11-27.
 
 **metatron / codiel の連携** — 願い → intent → 実装という一続きの流れは codiel が受け持ち
-(2026-09-27 に上流の intent 用プラグインを吸収)、metatron がプロジェクトの前提と失敗知識を供給する。**互いに独立して動く。**
+(2026-09-27 に上流の intent 用プラグインを吸収)、metatron がプロジェクトの前提(ARCHITECTURE)を供給する。**互いに独立して動く。**
 codiel は metatron が無くても単体で完結し、ドメインマップが無い場合も `unscoped` モードで run を
 開始できる。metatron は単体で記録として価値がある。
 
-**連携手段はファイル契約(ARCHITECTURE / GOTCHAS / intent 文書の書式)とモデルコンテキストの
+**連携手段はファイル契約(ARCHITECTURE / intent 文書の書式)とモデルコンテキストの
 2 つだけ。** プラグイン間の依存宣言も、互いのインストール位置の参照も一切無い。したがって同じ規則が
 2 実装に独立に写されており、一致の担保は 2 者比較テストしかない — 詳細は `mem:file_contract`。
 2026-08-17 に外部の独立レビュー指摘(致命 2・重大 2・契約の割れ 4)を修正し、3 プラグインの
 パッチバージョンを上げた(コミット a345f82 / f394cd0 / b468c5e、契約と設計書の追随は 10a5866)。
 
-- **codiel** (1.1.3) — intent-driven orchestrator gated by the bundled `raguel` MCP
-  server. Largest/most complex. 2026-09-27 に上流の intent 用プラグインを吸収し、run の起点を intent 文書に替え、同梱 Agent を無くした。 2026-08-16 に ARCHITECTURE / GOTCHAS の管理を metatron へ移し、
+- **codiel** (1.1.7) — intent-driven orchestrator gated by the bundled `raguel` MCP
+  server. Largest/most complex. 2026-09-27 に上流の intent 用プラグインを吸収し、run の起点を intent 文書に替え、同梱 Agent を無くした。 2026-08-16 に ARCHITECTURE の管理を metatron へ移し、
   `/codiel:init` の散文インタビューを廃止、guard-write にドメイン境界を配線した。
   Details: `mem:codiel/core`; MCP internals: `mem:codiel/raguel_mcp`.
-- **metatron** (0.6.0-dev) — ARCHITECTURE / GOTCHAS を独立資産として記録・更新する。両文書は CLAUDE.md の @メンションで読み込ませ、hook で本文を注入しない。codiel の持続層の `[ADR 候補]` を ADR へ移して参照形に縮め(`scan-adr-candidates` / `shrink-adr-candidate`)、`[GOTCHAS 候補]` を台帳へ移して消す(`scan-gotcha-candidates` / `remove-gotcha-candidate`)。codiel は 1.1.3(2026-11-19)からどちらの候補も書かない。この 2 つの走査と ADR・GOTCHAS 機能は Issue #46 で削除する予定。
+- **metatron** (0.6.3-dev) — ARCHITECTURE を独立資産として記録・更新する。文書は CLAUDE.md の @メンションで読み込ませ、hook で本文を注入しない。ADR 機能と GOTCHAS 機能は 0.6.1-dev(2026-11-27、Issue #46)で削除した。このリポジトリの ADR 一覧と GOTCHAS の台帳は `docs/old/metatron/` にあり、AI は読まない。
   共有ライブラリ + CLI + hook(SessionStart の案内と PreToolUse の deny)の構成で常駐プロセスを持たず、真の強制点は PreToolUse deny hook だけ。
   Details: `mem:metatron/core`.
-- **basic-design** (0.6.2-dev) — brainstorm-driven basic-design deliverables via spec-JSON →
+- **basic-design** (0.6.4-dev) — brainstorm-driven basic-design deliverables via spec-JSON →
   .drawio + HTML. Details: `mem:basic_design/core`.
-- **pitcrew** (0.10.2) — hooks-driven parallel-review layer: captures orchestration artifacts to
+- **pitcrew** (0.10.2-dev) — hooks-driven parallel-review layer: captures orchestration artifacts to
   `.pitcrew/review/` and injects human comments back into the session. Details: `mem:pitcrew/core`.
 - **raphael** (0.2.1-dev) — failure-immunity: detects failure signals into `.raphael/infections/`,
   distills them into antibodies (38 committed under `.raphael/antibodies/` as of 2026-08-17), and
@@ -94,7 +94,7 @@ codiel は metatron が無くても単体で完結し、ドメインマップが
 - **guidepost** (0.1.1-dev) — turns a commit range / PR diff into an AI-guided code-reading tour in
   a browser viewer, with reader questions injected back into the session.
   Details: `mem:guidepost/core`.
-- **chat-history** (0.7.0) — chat logging / recall / resume skills + chat-recorder & chat-reader
+- **chat-history** (0.8.5) — chat logging / recall / resume skills + chat-recorder & chat-reader
   agents. The record format flipped from summary to **verbatim** on 2026-08-16, so records are
   bimodal and readers must branch on the date. Details: `mem:chat_history/core`.
 - **gh-utility** (0.5.3-dev) — GitHub issue skills (`issue-craft` / `issue-split` / `issue-triage`)
@@ -104,20 +104,20 @@ codiel は metatron が無くても単体で完結し、ドメインマップが
   入り、渡された `title` / `body` を一切書き換えず(誤字修正・整形・要約・見出し並べ替えもしない)
   ブレインストーミングを飛ばして起票する。全文提示 → 明示承認のゲートは省略しない。判定は固定句の
   一致だけで行い推測で入らない。仕様の正本は `mem:file_contract` §10。
-- **agent-policy** (0.10.0-dev) — the model-tiering / orchestration discipline this repo itself runs
-  under. Since 2026-08-25 it **ships 4 agent definitions built from role fragments, injects the
+- **agent-policy** (0.21.10-dev) — the model-tiering / orchestration discipline this repo itself runs
+  under. Since 2026-08-25 it **injects the
   policy skill and a 役割 → Agent 名 table from a `SessionStart` hook, and offers one `setup-agents`
-  wizard** (the old `setup-gpt` / `setup-grok` pair was merged into it; the 2026-08-16 "7 definitions,
+  wizard that generates definitions into the project's `.claude/agents/`**; it ships no Agent definitions itself (since 0.14.0-dev) (the old `setup-gpt` / `setup-grok` pair was merged into it; the 2026-08-16 "7 definitions,
   hook writes files" model is gone). Details: `mem:agent_policy/core`.
-- **prompt-smith** (0.3.2-dev) — standards for AI-facing instruction docs (`prompt-smith`), agent
+- **prompt-smith** (0.5.2-dev) — standards for AI-facing instruction docs (`prompt-smith`), agent
   definitions (`agent-creator`) and skill authoring + description eval loop (`skill-creator`, a
   TypeScript port of Anthropic's official skill-creator). Details: `mem:agent_policy/core`.
-- **jevriel** (0.1.0-dev, added 2026-09-25) — MCP server (`.mcp.json` → `dist/server.mjs`) that
+- **jevriel** (0.2.0-dev, added 2026-09-25) — MCP server (`.mcp.json` → `dist/server.mjs`) that
   calls TypeSafe AI's judgement model Jev via `@typesafe-ai/sdk` 0.6.0: 5 judging tools, 3 browser
-  tools (Playwright resolved at runtime, never bundled), 2 API tools, plus skill `judging`.
+  tools (Playwright resolved at runtime, never bundled), 3 API tools, plus skill `judging`.
   Requires `TYPESAFE_API_KEY` (a paid external API allowed by ADR-005 — see the invariant section). Details:
   `mem:jevriel/core`.
-- **better-agentics** (0.0.5-dev, added 2026-10-26; launch-mode rework 2026-11-11; Jev opt-in 2026-11-18) — lightweight
+- **better-agentics** (0.0.6-dev, added 2026-10-26; launch-mode rework 2026-11-11; Jev opt-in 2026-11-18) — lightweight
   claude-only alternative to agent-policy: the orchestrator does research/design/implementation itself
   and delegates only for review / split / stuck. `TYPESAFE_API_KEY` is optional: without it,
   `review`/`split` with 2+ candidates skip Jev and return `options` (`{role, criteria}` only; split
@@ -140,6 +140,9 @@ codiel は metatron が無くても単体で完結し、ドメインマップが
   `references/subagent-policy.md` prefixed with the definition's role ID). Designs:
   `harness-docs/design/2026-10-26-better-agentics-design.md`,
   `harness-docs/design/2026-11-10-better-agentics-launch-modes-and-subagent-performance-design.md`.
+- **native-japanese** (0.2.13-dev) — 日本語の出力の規律をスキル `native-japanese:japanese-writing` で渡し、
+  コメントと文書は書き込んだ後に hook で検査して直させる。形態素解析の実行物と辞書は初回に取得する(ADR-010)。
+  Details: `plugins/native-japanese/README.md`.
 - **prefetch** (0.2.1-dev) — speculative background prefetch just before a user-input wait; single
   `UserPromptSubmit` hook (`check-prefetch-manifest.mjs`) nagging only when `.prefetch/` holds
   uncollected results.
@@ -198,7 +201,7 @@ the negation, to carry per-user state into `git worktree` checkouts.
   (code-review, sonnet), `complex-reviewer` (complex-review, gpt-astra), `adversarial-reviewer`
   (adversarial-review, gpt-sol). None has `Agent` in `tools`. `system-planner` and the two advisers
   were deleted with the `design-plan` / `advisor` roles. Regenerate them with the
-  individual `setup-agents` path and follow GOTCHA-001 (pass `--mcp-deny`). SessionStart reads them
+  individual `setup-agents` path and pass `--mcp-deny` (the old GOTCHA-001, now in `docs/old/metatron/GOTCHAS.md`, records why). SessionStart reads them
   into the marker table it injects; **the hook writes nothing**. The agent-policy plugin itself ships **no** agent definitions since
   0.14.0-dev, and the `AMATSUKA_AGENT_*_ALIAS` env vars are no longer read.
 - The protected-path treatment of `CLAUDE.md` is defined in `harness-docs/ARCHITECTURE.md`.

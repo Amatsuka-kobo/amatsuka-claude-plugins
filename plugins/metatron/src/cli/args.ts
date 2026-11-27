@@ -1,4 +1,4 @@
-// CLI の引数解析。外部ライブラリを使わない(契約 §11 の呼び出し規約は
+// CLI の引数解析。外部ライブラリを使わない(契約 §12 の呼び出し規約は
 // `<subcommand> [--key value]` だけなので、標準の parseArgs も要らない)。
 
 export interface ParsedArgs {
@@ -9,11 +9,7 @@ export interface ParsedArgs {
 }
 
 // 値を取らないフラグ。ここに無い `--foo` は次の語を値として取る。
-const BOOLEAN_FLAGS = new Set([
-  "exclude-tagged",
-  "promotion-candidates",
-  "help"
-])
+const BOOLEAN_FLAGS = new Set(["help"])
 
 export function parseArgs(argv: readonly string[]): ParsedArgs {
   const positionals: string[] = []
@@ -60,35 +56,4 @@ export function stringFlag(
   if (value === undefined) return undefined
   if (value === true) return undefined
   return value
-}
-
-export function boolFlag(
-  flags: Record<string, string | true>,
-  name: string
-): boolean {
-  const value = flags[name]
-  if (value === true) return true
-  if (typeof value === "string") return value !== "false" && value !== "0"
-  return false
-}
-
-export type IntFlag =
-  | { ok: true; value: number | undefined }
-  | { ok: false; message: string }
-
-export function intFlag(
-  flags: Record<string, string | true>,
-  name: string
-): IntFlag {
-  const raw = flags[name]
-  if (raw === undefined) return { ok: true, value: undefined }
-  if (raw === true)
-    return { ok: false, message: `--${name} に値がありません。` }
-  if (!/^-?\d+$/.test(raw.trim())) {
-    return {
-      ok: false,
-      message: `--${name} は整数で指定してください(受領: ${JSON.stringify(raw)})。`
-    }
-  }
-  return { ok: true, value: Number.parseInt(raw.trim(), 10) }
 }

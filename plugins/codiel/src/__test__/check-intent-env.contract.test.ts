@@ -46,7 +46,6 @@ function snapshot(dir: string): string[] {
 test("ケース 20: 実行前後で対象ディレクトリの内容が変化しない", () => {
   const dir = gitRepo("git@github.com:owner/repo.git")
   write(dir, "docs/ARCHITECTURE.md", DOMAINS_ARCHITECTURE)
-  write(dir, "docs/GOTCHAS.md", "# GOTCHAS\n")
   write(dir, "CLAUDE.md", "# CLAUDE\n")
   write(dir, "README.md", "# README\n")
   write(dir, "metatron.config.json", JSON.stringify({ version: 1 }))
@@ -169,15 +168,13 @@ test("契約 §14: Windows 形式の区切りを含む paths も同じパスへ�
     "metatron.config.json",
     JSON.stringify({
       version: 1,
-      paths: { architecture: "arch\\MAIN.md", gotchas: "arch\\TRAPS.md" }
+      paths: { architecture: "arch\\MAIN.md" }
     })
   )
   write(dir, "arch/MAIN.md", DOMAINS_ARCHITECTURE)
-  write(dir, "arch/TRAPS.md", "# GOTCHAS\n")
 
   const out = runScript(dir)
   expect(out.projectDocs.architecture).toBe(path.join(dir, "arch/MAIN.md"))
-  expect(out.projectDocs.gotchas).toBe(path.join(dir, "arch/TRAPS.md"))
   expect(out.configWarnings).toEqual([])
 })
 

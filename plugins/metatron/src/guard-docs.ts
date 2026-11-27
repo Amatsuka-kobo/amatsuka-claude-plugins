@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // metatron の PreToolUse deny hook。
-// 正本(ARCHITECTURE / GOTCHAS)への Edit / Write / NotebookEdit を拒否し、
+// 正本(ARCHITECTURE)への Edit / Write / NotebookEdit を拒否し、
 // CLI の絶対パスを添えて正しい窓口へ誘導する。
 //
 // **この hook が C1 構成の唯一の強制点である**(設計書 §7-5)。
@@ -20,7 +20,6 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { loadConfig } from "./lib/config.js"
 import { emit, pass, readStdin } from "./lib/emit.js"
-import { ADR_ENV, GOTCHAS_ENV, readFeatures } from "./lib/features.js"
 
 // hook 自身の位置(import.meta.url)からプラグインルートを求め、
 // その配下の CLI の絶対パスを組み立てる。deny hook は CLI を実行しない。
@@ -182,52 +181,17 @@ function comparisonKey(abs: string, caseInsensitive: boolean): string {
   return caseInsensitive ? key.toLowerCase() : key
 }
 
-// 記録が無効な側は、拒否される CLI へ誘導せず、有効にする方法を書く
-// (`harness-docs/design/2026-10-08-metatron-adr-gotchas-opt-in-design.md` の 3-3)。
-// 直接編集の拒否そのものは変数によらず続ける。
-function disabledLine(label: string, env: string): string {
-  return `${label} の記録は無効です(有効にするには ${env}=1)。`
-}
-
 // 書き込みの CLI 手順は載せず、スキルへ誘導する。stage → commit が完結した形で見えると、
 // スキルを起動せずに CLI へ直行し、乖離の検出・草案の検査・承認の手順を飛ばす。
 const SKILL_LINE =
   "更新は Skill ツールで metatron:updating-architecture を起動し、その手順で行ってください。"
 
-function architectureReason(
-  relative: string,
-  cli: string,
-  adrEnabled: boolean
-): string {
+function architectureReason(relative: string, cli: string): string {
   return [
     `${relative} は metatron の管理下にあり、直接編集できません(セクション単位の差分確認と書式検証のため)。`,
     "ARCHITECTURE がまだ無いときは /metatron:init で作成してください。",
     SKILL_LINE,
-    adrEnabled
-      ? "ADR の追加・状態変更も同じスキルで行ってください。"
-      : disabledLine("ADR", ADR_ENV),
     `CLI の絶対パスと入力の書式: node ${cli} get config`
-  ].join("\n")
-}
-
-function gotchasReason(
-  relative: string,
-  cli: string,
-  gotchasEnabled: boolean
-): string {
-  const head = `${relative} は metatron の管理下にあり、直接編集できません(追記・採番・書式検証と、書き換えの差分承認のため)。既存エントリの書き換えは updating-architecture スキルの監査の手順で行います。`
-  if (!gotchasEnabled) {
-    return [head, disabledLine("GOTCHAS", GOTCHAS_ENV)].join("\n")
-  }
-  return [
-    head,
-    "エントリの JSON を一時ファイルに書き、次のコマンドで追記してください:",
-    `  node ${cli} append-gotcha --input /tmp/metatron-gotcha.json`,
-    "台帳がまだ無いときは、ユーザーの承認を得てから新規作成してください:",
-    `  node ${cli} init-gotchas`,
-    "既存エントリへのタグ付与(解決済み / 対象外):",
-    `  node ${cli} tag-gotcha --id GOTCHA-003 --tag 解決済み --reason "<理由>"`,
-    `入力の書式: node ${cli} get config`
   ].join("\n")
 }
 
@@ -254,11 +218,9 @@ try {
     config.architecturePath,
     caseInsensitive
   )
-  const gotchasKey = comparisonKey(config.gotchasPath, caseInsensitive)
   const cli = metatronCliPath()
 
   let hitArchitecture = false
-  let hitGotchas = false
   for (const raw of candidates) {
     // キーを 2 つ作り、どちらかが正本に当たれば拒否する。1 つは生の結合パスを実体で辿り、
     // `..` をリンク先の親で畳む(OS が書き込む先)。もう 1 つは path.resolve で字句で畳む。
@@ -271,21 +233,11 @@ try {
     ]
     for (const key of keys) {
       if (key === architectureKey) hitArchitecture = true
-      if (key === gotchasKey) hitGotchas = true
     }
   }
 
-  // 2 つのフィールドが別々の正本に当たったときは ARCHITECTURE の案内を出す。
-  // スキルへの誘導に加えて init と ADR の案内まで含む側を残すほうが、取りこぼす情報が少ない。
-  const features = readFeatures(process.env)
   if (hitArchitecture)
-    emit(
-      "deny",
-      architectureReason(config.architectureRelative, cli, features.adr)
-    )
-
-  if (hitGotchas)
-    emit("deny", gotchasReason(config.gotchasRelative, cli, features.gotchas))
+    emit("deny", architectureReason(config.architectureRelative, cli))
 
   pass()
 } catch {

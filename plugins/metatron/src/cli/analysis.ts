@@ -9,7 +9,6 @@ import {
   parseArchitectureForRead
 } from "../lib/architecture.js"
 import { loadConfig } from "../lib/config.js"
-import type { Features } from "../lib/features.js"
 import {
   diffArchitecture,
   type ArchitectureSection as ScanArchitectureSection,
@@ -26,8 +25,6 @@ import {
 export interface AnalysisContext {
   flags: Record<string, string | true>
   cwd: string
-  /** 2 変数の判定結果。main.ts が実行ごとに 1 回読んで渡す。 */
-  features: Features
 }
 
 export function runScan(ctx: AnalysisContext): void {
@@ -59,8 +56,7 @@ export function runDiffArchitecture(ctx: AnalysisContext): void {
       scan: scanned,
       sections,
       architectureExists: file.exists,
-      domains: domains.ok ? domains.domains : null,
-      adrEnabled: ctx.features.adr
+      domains: domains.ok ? domains.domains : null
     })
 
     const warnings = [

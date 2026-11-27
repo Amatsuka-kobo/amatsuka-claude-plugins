@@ -49,7 +49,7 @@ Marketplace を追加後、このリポジトリにあるプラグインをイ�
 | 名前              | 説明                                                                                                                | ステータス |
 | --------------- | ----------------------------------------------------------------------------------------------------------------- | ----- |
 | Codiel 👀🌿     | 変更ごとの intent 文書を起点に、設計・開発・テスト・PR起票・レビューを一気通貫で行うオーケストレーター                                                          | リリース   |
-| Metatron 📜     | プロジェクトアーキテクチャと失敗知識を管理し、CLAUDE.md の @メンションで毎セッション AI に読ませるプラグイン                                                        | 開発中   |
+| Metatron 📜     | プロジェクトアーキテクチャを管理し、CLAUDE.md の @メンションで毎セッション AI に読ませるプラグイン                                                        | 開発中   |
 | agent-policy    | エージェント運用を最適化するプラグイン。Claude のモデル名で役割を固定する "claude" プロファイルと、プロジェクトの Agent 定義に付いた役割マーカーで委譲先を決める "custom" プロファイルを提供する | 開発中   |
 | prompt-smith    | エージェントに渡すプロンプトの無駄を省き、AIが読んでより理解しやすく出力の品質を上げるプロンプト設計・改善・最適化のためのプラグイン                                               | 開発中   |
 | jevriel         | TypeSafe AI の判断モデル Jev を利用し、分類・順位付け・主張の確認・操作の安全性評価とブラウザ・API の動作確認を行う MCP プラグイン                                    | 開発中   |
@@ -74,7 +74,7 @@ Marketplace を追加後、このリポジトリにあるプラグインをイ�
 
 ユーザーの「やりたいこと」を聞き取り、それを起点に設計・開発・テスト・PR 起票・レビューを一気通貫で行う、Intent-Driven Development (Intent駆動開発) をフルサポートするプラグインです。設計書・実装計画書・intent 文書の執筆とテストコマンドの実行はオーケストレーターが自分で行い、テスト仕様・テストコード・実装・レビュー・E2E の実行は作業の単位に分け、単位ごとの入出力と書いてよい範囲を契約として渡します。単位を委譲するか、どの定義に委譲するかは、プロジェクトの運用方針(better-agentics・agent-policy など)に任せます。
 
-変更ごとの intent とは別に、領域ごとの持続層(`docs/intents/domains/<領域>.md`)に目的と意図的な制約を残し、次の run の聞き取り・設計・レビューの前提にします。run で決まった設計は、データモデル・API 一覧・画面遷移などの種別ごとに `docs/intents/design/` の設計資料へ残します。basic-design の設計資料があるプロジェクトでは、`docs/intents/design/` の代わりに basic-design の成果物を更新します。GitHub と連携するときは、Codiel が対応する Issue と PR にラベル `codiel` を付けます。
+変更ごとの intent とは別に、領域ごとの持続層(`docs/intents/domains/<領域>.md`)に目的と意図的な制約を残し、次の run の聞き取り・設計・レビューの前提にします。run の変更で古くなった持続層の記述は、承認を得て改訂・削除します。run で決まった設計は、データモデル・API 一覧・画面遷移などの種別ごとに `docs/intents/design/` の設計資料へ残します。basic-design の設計資料があるプロジェクトでは、`docs/intents/design/` の代わりに basic-design の成果物を更新します。GitHub と連携するときは、Codiel が対応する Issue と PR にラベル `codiel` を付けます。
 
 Codiel を使って開発するには、`/codiel:init` でCodiel のルールなどが記載された CLAUDE.md と Rules 、Codiel 専用の設定ファイル、.gitignore などの最低限のハーネスを構築することが前提になります。
 
@@ -88,16 +88,15 @@ Codiel には、AI の暴走を防ぎ、セキュリティを担保するため�
 
 ### Metatron 📜
 
-プロジェクトアーキテクチャと失敗知識の 2 つの文書を管理するプラグインです。
+プロジェクトアーキテクチャの文書を管理するプラグインです。
 
 - プロジェクトアーキテクチャ: `ARCHITECTURE.md`(保護パスとテスト方針を含む)
-- 失敗知識: `GOTCHAS.md`
 
-両文書はプロジェクトの `CLAUDE.md` に書いた @メンションで毎セッション読み込まれ、サブエージェントにも届きます。SessionStart hook は本文を注入せず、CLI の絶対パスと記録のタイミングだけを案内します。コーディング規約などのプロジェクトの規約は、Metatron の管理外で `CLAUDE.md` に書きます。
+ARCHITECTURE はプロジェクトの `CLAUDE.md` に書いた @メンションで毎セッション読み込まれ、サブエージェントにも届きます。SessionStart hook は本文を注入せず、CLI の絶対パスと更新の案内だけを出します。コーディング規約などのプロジェクトの規約は、Metatron の管理外で `CLAUDE.md` に書きます。
 
-AI による上記文書への書き込み口を CLI に一本化し、書式の検証・連番の採番・GOTCHAS が追記のみであることを機械的に保証します。直接編集は PreToolUse hook が拒否し、CLI の絶対パス付きで正しい書き込み口へ案内します。
+AI による上記文書への書き込み口を CLI に一本化し、書式の検証と差分の承認を機械的に保証します。直接編集は PreToolUse hook が拒否し、CLI の絶対パス付きで正しい書き込み口へ案内します。
 
-`/metatron:init` でコードベース解析を行い、ARCHITECTURE.md と空の GOTCHAS.md を生成し、`CLAUDE.md` に @メンションを追記します。
+`/metatron:init` でコードベース解析を行い、ARCHITECTURE.md を生成し、`CLAUDE.md` に @メンションを追記します。
 
 `/metatron:update` は現行コードとの乖離を検出して更新します。旧バージョンの rules(`.claude/rules/metatron/`)が残っていれば、ARCHITECTURE と `CLAUDE.md` への移行も行います。
 
@@ -105,21 +104,9 @@ AI による上記文書への書き込み口を CLI に一本化し、書式の
 
 `/metatron:audit` は既存の文書を書式と執筆規律の現行の規定に照らして監査し、合わない箇所を書き直します。
 
-`/metatron:{init,update}` は、どちらも Codiel 1.1.2 以前が持続層に書いた `[ADR 候補]` と `[GOTCHAS 候補]` を走査し、承認されたものを ADR と GOTCHAS として記録します。Codiel 1.1.3 以降は候補を書きません。
-
-#### 環境変数
-
-ADR と GOTCHAS の記録はオプトインです。値が `1` / `true` / `on` のいずれかなら有効になり、未設定やそれ以外の値なら無効です。
-
-- `AMATSUKA_METATRON_ENABLE_ADR`: ADR の記録を有効にします。
-- `AMATSUKA_METATRON_ENABLE_GOTCHAS`: GOTCHAS の記録を有効にします。
-
-チームで設定を揃えるため、プロジェクトの `.claude/settings.json` の `env` に書いてコミットすることを推奨します。値を変えたら新しいセッションを始めてください。
-
-これらの文書は、ルートの `metatron.config.json` で置き場所を設定できます。既定値は以下の通りです。
+この文書は、ルートの `metatron.config.json` で置き場所を設定できます。既定値は以下の通りです。
 
 - `paths.architecture`: `docs/ARCHITECTURE.md`
-- `paths.gotchas`: `docs/GOTCHAS.md`
 
 ※ Metatron とは、神の記録を司り人の行いを書き留める天の書記天使の名前です。
 
@@ -127,13 +114,13 @@ ADR と GOTCHAS の記録はオプトインです。値が `1` / `true` / `on` �
 
 この 2 つのプラグインは連携することができます。(それぞれ独立して使用することも可)
 
-Codiel は、intent をまたいで効き続ける意図的な制約と、run で起きた失敗の記録を、intent の持続層に残します。Metatron の有無や環境変数によらず、すべての run で残します。
+Codiel は、intent をまたいで効き続ける意図的な制約と、run で起きた失敗の記録を、intent の持続層に残します。Metatron の有無によらず、すべての run で残します。
 
-Metatron も Codiel が無いところで、ARCHITECTURE・GOTCHAS を管理するプラグインとして単体でハーネス資産を提供します。
+Metatron も Codiel が無いところで、ARCHITECTURE を管理するプラグインとして単体でハーネス資産を提供します。
 
-Metatron を併用した Codiel は、システム概要・レイヤー構造・保護パス・テスト方針・ADR・失敗知識を含むプロジェクト知識をもって効率的かつ安全に開発を進めることができます。
+Metatron を併用した Codiel は、システム概要・レイヤー構造・保護パス・テスト方針を含むプロジェクト知識をもって効率的かつ安全に開発を進められます。
 
-2つのプラグインは、プラグインの生成ファイル(ARCHITECTURE / GOTCHAS / intent 文書)とコンテキストで相互補完を行います。
+2つのプラグインは、プラグインの生成ファイル(ARCHITECTURE / intent 文書)とコンテキストで相互補完を行います。
 
 ---
 

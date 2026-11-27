@@ -85,7 +85,7 @@ test("config.json の raguel と .gitignore は書かない。ARCHITECTURE / CLA
   )
 })
 
-test("GOTCHAS.md は作成しない(台帳の生成は metatron が行う)", () => {
+test("GOTCHAS.md は作成しない", () => {
   const root = tmpProject()
   run(root)
   expect(

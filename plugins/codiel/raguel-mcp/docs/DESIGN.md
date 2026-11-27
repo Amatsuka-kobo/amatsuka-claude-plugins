@@ -178,11 +178,11 @@ plan・design の `paths` は repoPath 相対で、実体パスが repoPath の�
 
 ## 6. 重さ判定は撤去した
 
-重さ判定(tier)と、tier に応じた判定の分岐を廃止した。判例検索は残り、tier に関係なく毎回行う(§12)。理由と決定は ADR-012 と、設計書 `harness-docs/design/2026-10-01-codiel-run-speedup-design.md` の S7・S8 にある。応答と `verdict.json` に `weightTier` と `meta` は無い。
+重さ判定(tier)と、tier に応じた判定の分岐を廃止した。判例検索は残り、tier に関係なく毎回行う(§12)。理由と決定は設計書 `harness-docs/design/2026-10-01-codiel-run-speedup-design.md` の S7・S8 にある。応答と `verdict.json` に `weightTier` と `meta` は無い。
 
 ## 7. LLM 判定パネルは撤去し、合成規則は 4 行である
 
-adversarial・steelman・crosscheck・meta の LLM パネルと、`claude`・`codex` の子プロセスの起動は撤去した。理由は ADR-012 と、設計書の §2 にある。内容の判定は Jev が担う(§8)。
+adversarial・steelman・crosscheck・meta の LLM パネルと、`claude`・`codex` の子プロセスの起動は撤去した。理由は設計書の §2 にある。内容の判定は Jev が担う(§8)。
 
 ### 7.1 合成規則
 
@@ -199,7 +199,7 @@ adversarial・steelman・crosscheck・meta の LLM パネルと、`claude`・`co
 
 ## 8. Jev は鍵があれば文脈を補正し、内容を判定する
 
-正規表現と語彙の判定は文脈を見ないので、説明文やテストの固定データで誤検知し、否定文や中身の無い欄を見逃す。そこで TypeSafe AI の Jev(`@typesafe-ai/sdk`、鍵は環境変数 `TYPESAFE_API_KEY`)で、ルール層の補正(文脈判定)と成果物の内容の判定(内容判定)を行う。パネルを撤去した後の内容の検査は、この内容判定が担う(ADR-012)。問いの表と閾値の規則は設計書 `harness-docs/design/2026-10-01-codiel-run-speedup-design.md` の §4.2・§4.3 にある。
+正規表現と語彙の判定は文脈を見ないので、説明文やテストの固定データで誤検知し、否定文や中身の無い欄を見逃す。そこで TypeSafe AI の Jev(`@typesafe-ai/sdk`、鍵は環境変数 `TYPESAFE_API_KEY`)で、ルール層の補正(文脈判定)と成果物の内容の判定(内容判定)を行う。パネルを撤去した後の内容の検査は、この内容判定が担う(設計書の §2)。問いの表と閾値の規則は設計書 `harness-docs/design/2026-10-01-codiel-run-speedup-design.md` の §4.2・§4.3 にある。
 
 - 鍵があれば自動で使う。有効にする設定は無い(`contextJudge.enabled` は廃止した)。鍵が無い利用者は、ルール層だけで判定し、`contextJudge/unavailable`(info)を 1 件残す。ASK にも degraded にもしない。
 - 正規表現の判定を土台に残し、Jev は文脈で絞るか上げるだけである。Jev は単独で STOP も PROCEED も出さない。動かせる向きは、`code/destructive-ops` の stop → ask と、語彙系の info → ask(`plan/irreversible-ops`・`plan/scope-keywords`・`decision/no-rollback`・`decision/no-alternatives`)、再提出・injection-marker の「上げる」向きだけである。内容判定の問いは、閾値の外のとき `judge/<ID>` の ask を足す。`code/unsafe-exec` は確率を message に添えるだけで severity を変えない。
@@ -330,7 +330,7 @@ head = 既知の証拠ファイルを名前順に H(prev + name + ":" + sha256) 
 - マージは、オブジェクトは再帰、配列は置換とする。例外は、ルールの `params` のスキーマが「和集合」と宣言した配列(`code/protected-paths.globs`、`common/secrets.allowPatterns` など)で、既定値との和集合にする。
 - sealed ルールの無効化・severity の引き下げ、stop にできないルールの `severity: stop`、不正な正規表現や広すぎる `allowPatterns`(空文字列に一致する、内蔵の見本の秘密情報に一致する)、`excludeDefaults` の既定に無い文字列、固定部が空の `generated` と、固定部が空の `subject.ignoreUncommitted`(作業ツリー全体を未コミットの検査から外す宣言を防ぐ)は読み込みエラーにする。`subject.ignoreUncommitted` にソースのパスを宣言すると、未コミットのコードの変更が評価に入らないままテストの結果に効く。宣言は毎回応答に出て、run の間は guard が `.codiel/config.json` への書き込みを拒む。README には、run と関係の無いファイルの置き場だけを書くと記す。`allowPatterns` は行ではなくトークンに当てる。
 - `contextJudge.timeoutMs` が 1800000 を超える、`contextJudge.thresholds` の `lower` が `raise` 以上か 0〜1 の外、`resubmission-loop.similarityThreshold` が 0.95 を超える、も読み込みエラーである。
-- 撤去した `judge`・`weight`・`panel` の全体と `contextJudge.enabled` は、読み込みエラーにせず取り除き、取り除いたキーを並べた警告を評価のたびに `reasons` に 1 件残す。既存の利用者の設定ファイルで run が止まらないようにするためである(ADR-012)。
+- 撤去した `judge`・`weight`・`panel` の全体と `contextJudge.enabled` は、読み込みエラーにせず取り除き、取り除いたキーを並べた警告を評価のたびに `reasons` に 1 件残す。既存の利用者の設定ファイルで run が止まらないようにするためである(設計書の §4.1)。
 
 ### 14.4 設定が壊れていても起動し、次の評価で直る
 
@@ -389,10 +389,10 @@ src/
 
 - 原則「STOP は覆せない」を改め、STOP を 4 種に絞って、改竄以外は人の裁定で通せるようにした。`judge.canStop` は廃止した。
 - 評価の入力を、呼び出し側が本文を渡す形から、Raguel が git とファイルを読む形へ置き換えた。フェーズを必須にし、attempt をフェーズ単位で数える。
-- 前提監査のパネリストと判例調査のパネリストは撤去し、職務を adversarial と参考入力に移した。その adversarial も後に撤去した(ADR-012)。
+- 前提監査のパネリストと判例調査のパネリストは撤去し、職務を adversarial と参考入力に移した。その adversarial も後に撤去した(設計書の §2)。
 - 設定の置き場を、リポジトリ直下の `raguel.config.yaml` から、`.codiel/config.json` の `raguel` キー(JSON)へ移した。旧 YAML の設定は `/codiel:init` が移す。
 - パネルのモデルを決める設定(プロバイダーとパネリストごとの上書き)は、パネルごと撤去した。
 - `code/dangerous-patterns` を、破壊操作(stop)と実行・権限(ask)の 2 つのルール ID に分けた。
 - 判定に `judgeStatus` を足し、基盤の障害を内容の懸念と分けた。
 
-- LLM パネル(adversarial・steelman・crosscheck・meta)と重さ判定を撤去し、Jev の内容判定に置き換えた(ADR-012、設計書 `harness-docs/design/2026-10-01-codiel-run-speedup-design.md`)。`judge`・`weight`・`panel`・`contextJudge.enabled` の設定は廃止した。
+- LLM パネル(adversarial・steelman・crosscheck・meta)と重さ判定を撤去し、Jev の内容判定に置き換えた(設計書 `harness-docs/design/2026-10-01-codiel-run-speedup-design.md`)。`judge`・`weight`・`panel`・`contextJudge.enabled` の設定は廃止した。

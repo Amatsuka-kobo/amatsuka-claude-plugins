@@ -6,15 +6,14 @@
 //
 // 加えて stage → commit の正常系を CLI 経由で通しで検証する。
 
-import { execFileSync } from "node:child_process"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { afterAll, expect, test } from "vitest"
 import { findSection, parseArchitecture } from "../../lib/architecture.js"
-import { ADR_ENV, type Features, GOTCHAS_ENV } from "../../lib/features.js"
-import { stagingDirFor } from "../../lib/staging.js"
+import { lockPathFor } from "../../lib/file-lock.js"
+import { computeRecordHash, stagingDirFor } from "../../lib/staging.js"
 import { runTs } from "../../testing/run-ts.js"
 import { MAX_DIFF_LINES } from "../diff.js"
 import { READ_SUBCOMMANDS, WRITE_SUBCOMMANDS } from "../main.js"
@@ -56,32 +55,15 @@ interface CliRun {
   json: Record<string, unknown> | null
 }
 
-const BOTH_ON: Features = { adr: true, gotchas: true }
-
-// 2 変数はテストを起動したシェルから継承せず、呼び出し側が features で明示する。
-// 無効な側は未設定にする。既存の ADR・GOTCHAS の書き込みは両方有効の既定で走らせる。
-function cliEnv(features: Features): NodeJS.ProcessEnv {
-  const env = { ...process.env }
-  delete env[ADR_ENV]
-  delete env[GOTCHAS_ENV]
-  if (features.adr) env[ADR_ENV] = "1"
-  if (features.gotchas) env[GOTCHAS_ENV] = "1"
-  return env
-}
-
 // execFileSync は非 0 終了で例外を投げる。CLI の契約は「非 0 でも stdout に JSON」なので、
 // 例外に載ってくる stdout / status を取り出して同じ形で返す。
-function runCli(
-  args: string[],
-  cwd: string,
-  features: Features = BOTH_ON
-): CliRun {
+function runCli(args: string[], cwd: string): CliRun {
   let status = 0
   let stdout = ""
   try {
     stdout = runTs(CLI, args, {
       cwd,
-      env: cliEnv(features),
+      env: process.env,
       stdio: ["pipe", "pipe", "pipe"],
       encoding: "utf8"
     })
@@ -181,21 +163,6 @@ const ARCHITECTURE_UNCLOSED = [
   ""
 ].join("\n")
 
-const GOTCHAS = [
-  "# GOTCHAS",
-  "",
-  "## 失敗パターン一覧",
-  "",
-  "### [2026-08-10] GOTCHA-001: 既存のエントリ",
-  "",
-  "**タスク**: 何かをしようとした",
-  "**失敗内容**: 間違えた",
-  "**原因 (推測)**: 確認しなかった",
-  "**対策**: 実行前に対象ファイルを Read して確認する",
-  "**昇格候補**: No",
-  ""
-].join("\n")
-
 /** 設定と ARCHITECTURE を持つ一時プロジェクト。docRoot はこのディレクトリに固定される。 */
 function project(): string {
   const root = mkTmp()
@@ -204,10 +171,9 @@ function project(): string {
   return root
 }
 
-function docs(root: string): { architecture: string; gotchas: string } {
+function docs(root: string): { architecture: string } {
   return {
-    architecture: path.join(root, "docs", "ARCHITECTURE.md"),
-    gotchas: path.join(root, "docs", "GOTCHAS.md")
+    architecture: path.join(root, "docs", "ARCHITECTURE.md")
   }
 }
 
@@ -220,17 +186,6 @@ const READ_INVOCATIONS: string[][] = [
   ["get", "architecture"],
   ["get", "architecture", "--section", "システム概要"],
   ["get", "domains"],
-  ["get", "gotchas"],
-  ["get", "gotchas-template"],
-  [
-    "get",
-    "gotchas",
-    "--recent",
-    "3",
-    "--exclude-tagged",
-    "--promotion-candidates"
-  ],
-  ["get", "adr"],
   ["scan"],
   ["diff-architecture"]
 ]
@@ -277,7 +232,7 @@ test("S5: 空ディレクトリでも読み取り系は exit 0 で JSON を返�
   expectAllReadsSucceed(mkTmp(), "空ディレクトリ")
 })
 
-test("S5: ARCHITECTURE も GOTCHAS も無い環境でも読み取り系は exit 0", () => {
+test("S5: ARCHITECTURE が無い環境でも読み取り系は exit 0", () => {
   const root = mkTmp()
   writeFile(root, "metatron.config.json", "{}")
   writeFile(
@@ -307,7 +262,6 @@ test("S5: 未閉フェンスの ARCHITECTURE でも読み取り系は exit 0(警
   const root = mkTmp()
   writeFile(root, "metatron.config.json", "{}")
   writeFile(root, "docs/ARCHITECTURE.md", ARCHITECTURE_UNCLOSED)
-  writeFile(root, "docs/GOTCHAS.md", GOTCHAS)
   expectAllReadsSucceed(root, "未閉フェンス")
 
   const run = runCli(["get", "architecture"], root)
@@ -335,10 +289,10 @@ interface Rejection {
 
 const REJECTIONS: Rejection[] = [
   {
-    name: "stage-architecture に ADR 一覧 を渡す",
+    name: "stage-architecture に ADR 一覧 の本文を渡す",
     args: ["stage-architecture"],
     input: { sections: [{ heading: "ADR 一覧", body: "### ADR-001: x" }] },
-    error: "adr_heading"
+    error: "unknown_heading"
   },
   {
     name: "stage-architecture に廃止済みの overview キーを渡す",
@@ -387,72 +341,6 @@ const REJECTIONS: Rejection[] = [
     error: "invalid_input"
   },
   {
-    name: "stage-adr の状態変更で reason を省略",
-    args: ["stage-adr"],
-    input: { mode: "status", id: "ADR-001", status: "廃止" },
-    error: "invalid_input"
-  },
-  {
-    name: "stage-adr の状態が値域外",
-    args: ["stage-adr"],
-    input: {
-      mode: "add",
-      title: "値域外の状態",
-      status: "検討中",
-      decidedBy: "team",
-      background: "背景",
-      options: ["A: 良い/悪い"],
-      conclusion: "結論",
-      rationale: "理由",
-      impact: "影響"
-    },
-    error: "invalid_status"
-  },
-  {
-    name: "init-gotchas は内容のある台帳を拒否する",
-    args: ["init-gotchas"],
-    error: "already_exists"
-  },
-  {
-    name: "append-gotcha の promotionCandidate が値域外",
-    args: ["append-gotcha"],
-    input: {
-      title: "やらかした",
-      task: "t",
-      mistake: "m",
-      cause: "c",
-      countermeasure: "実行前に Read する",
-      promotionCandidate: "Maybe"
-    },
-    error: "invalid_input"
-  },
-  {
-    name: "tag-gotcha の tag が値域外",
-    args: [
-      "tag-gotcha",
-      "--id",
-      "GOTCHA-001",
-      "--tag",
-      "未対応",
-      "--reason",
-      "r"
-    ],
-    error: "invalid_tag"
-  },
-  {
-    name: "tag-gotcha の対象 ID が存在しない",
-    args: [
-      "tag-gotcha",
-      "--id",
-      "GOTCHA-999",
-      "--tag",
-      "解決済み",
-      "--reason",
-      "直した"
-    ],
-    error: "not_found"
-  },
-  {
     name: "commit-architecture に未知の stagingId",
     args: [
       "commit-architecture",
@@ -478,9 +366,8 @@ test("S6: 書き込み系の拒否は非 0 終了・妥当な JSON・ファイ�
       "docs/ARCHITECTURE.md",
       rejection.unclosed === true ? ARCHITECTURE_UNCLOSED : ARCHITECTURE
     )
-    writeFile(root, "docs/GOTCHAS.md", GOTCHAS)
-    const { architecture, gotchas } = docs(root)
-    const before = snapshot([architecture, gotchas])
+    const { architecture } = docs(root)
+    const before = snapshot([architecture])
 
     const args = [...rejection.args]
     if (rejection.input !== undefined) {
@@ -510,69 +397,6 @@ test("S6: 書き込み系の拒否は非 0 終了・妥当な JSON・ファイ�
     }
     expectUnchanged(before)
   }
-})
-
-// ---------------------------------------------------------------------------
-// GOTCHAS 台帳の初回生成(CLI 経由の通し)
-// ---------------------------------------------------------------------------
-
-test("get gotchas-template → init-gotchas で作成し、再実行は拒否する", () => {
-  const root = project()
-  const gotchasPath = path.join(root, "docs", "GOTCHAS.md")
-
-  const before = runCli(["get", "gotchas-template"], root)
-  expect(before.status).toBe(0)
-  const beforeJson = before.json as Record<string, unknown>
-  expect(beforeJson.ok).toBe(true)
-  expect(beforeJson.exists).toBe(false)
-  expect(beforeJson.hasContent).toBe(false)
-  expect(beforeJson.next).not.toBeNull()
-
-  const initialized = runCli(["init-gotchas"], root)
-  expect(initialized.status).toBe(0)
-  expect((initialized.json as Record<string, unknown>).created).toBe(true)
-
-  const after = runCli(["get", "gotchas-template"], root)
-  expect(after.status).toBe(0)
-  const afterJson = after.json as Record<string, unknown>
-  expect(afterJson.exists).toBe(true)
-  expect(afterJson.hasContent).toBe(true)
-  expect(afterJson.next).toBeNull()
-  expect(fs.readFileSync(gotchasPath, "utf8")).toBe(afterJson.template)
-
-  const snapshotBeforeRetry = snapshot([gotchasPath])
-  const retry = runCli(["init-gotchas"], root)
-  expect(retry.status).not.toBe(0)
-  expect((retry.json as Record<string, unknown>).error).toBe("already_exists")
-  expectUnchanged(snapshotBeforeRetry)
-})
-
-test("台帳が無い状態でも get gotchas-template は ok: true", () => {
-  const root = mkTmp()
-
-  const run = runCli(["get", "gotchas-template"], root)
-
-  expect(run.status).toBe(0)
-  const json = run.json as Record<string, unknown>
-  expect(json.ok).toBe(true)
-  expect(json.exists).toBe(false)
-  expect(json.hasContent).toBe(false)
-})
-
-test("空白のみの台帳は exists: true / hasContent: false となり雛形で作り直す", () => {
-  const root = project()
-  const gotchasPath = writeFile(root, "docs/GOTCHAS.md", "   \n\n")
-
-  const before = runCli(["get", "gotchas-template"], root)
-  expect(before.status).toBe(0)
-  const beforeJson = before.json as Record<string, unknown>
-  expect(beforeJson.exists).toBe(true)
-  expect(beforeJson.hasContent).toBe(false)
-
-  const initialized = runCli(["init-gotchas"], root)
-  expect(initialized.status).toBe(0)
-  expect((initialized.json as Record<string, unknown>).created).toBe(true)
-  expect(fs.readFileSync(gotchasPath, "utf8")).toBe(beforeJson.template)
 })
 
 // ---------------------------------------------------------------------------
@@ -636,119 +460,6 @@ test("stage-architecture → commit-architecture で対象セクションだけ�
   )
   expect(again.status).not.toBe(0)
   expect((again.json as Record<string, unknown>).error).toBe("already_used")
-})
-
-test("stage-adr → commit-architecture で ADR が採番されて末尾に追加される", () => {
-  const root = mkTmp()
-  writeFile(root, "metatron.config.json", "{}")
-  const architecture = writeFile(root, "docs/ARCHITECTURE.md", ARCHITECTURE)
-  const inputPath = writeFile(
-    root,
-    "adr.json",
-    JSON.stringify({
-      mode: "add",
-      title: "CLI を stage と commit の 2 段階にする",
-      decidedBy: "team",
-      background: "承認の有無を CLI は判定できない",
-      options: ["A: 1 コマンドで書く / 差分を見せずに書けてしまう"],
-      conclusion: "2 段階にする",
-      rationale: "diff を計算せずに書く経路をコマンド体系から無くせる",
-      impact: "plugins/metatron/src/cli"
-    })
-  )
-
-  const beforeBuf = fs.readFileSync(architecture)
-  const staged = runCli(["stage-adr", "--input", inputPath], root)
-  expect(staged.status).toBe(0)
-  const stagedJson = staged.json as Record<string, unknown>
-  expect(stagedJson.ok).toBe(true)
-  expect(stagedJson.assignedId).toBe("ADR-001")
-  // stage-adr の diff も省略の有無を機械的に返す。
-  expect((stagedJson.diff as Record<string, unknown>).truncated).toBe(false)
-  expect(fs.readFileSync(architecture).equals(beforeBuf)).toBe(true)
-
-  const committed = runCli(
-    ["commit-architecture", "--staging-id", stagedJson.stagingId as string],
-    root
-  )
-  expect(committed.status).toBe(0)
-  expect((committed.json as Record<string, unknown>).written).toBe(true)
-
-  const listed = runCli(["get", "adr"], root)
-  expect(listed.status).toBe(0)
-  const listedJson = listed.json as Record<string, unknown>
-  expect(listedJson.ok).toBe(true)
-  expect(listedJson.total).toBe(1)
-  const entries = listedJson.entries as Record<string, unknown>[]
-  expect(entries[0].id).toBe("ADR-001")
-  expect(entries[0].status).toBe("採用")
-
-  // ADR は末尾の節に入り、既存セクションはバイト単位で不変。
-  const afterDoc = parseArchitecture(fs.readFileSync(architecture, "utf8"))
-  const beforeDoc = parseArchitecture(beforeBuf.toString("utf8"))
-  for (const heading of ["システム概要", "技術スタック", "ドメインマップ"]) {
-    expect(
-      findSection(afterDoc, heading)?.raw,
-      `${heading} が変化している`
-    ).toBe(findSection(beforeDoc, heading)?.raw)
-  }
-})
-
-test("N10: ADR を 2 件足すと区切りが入り、get adr の raw には含まれない", () => {
-  const root = mkTmp()
-  writeFile(root, "metatron.config.json", "{}")
-  const architecture = writeFile(root, "docs/ARCHITECTURE.md", ARCHITECTURE)
-
-  const addAdr = (filename: string, title: string, impact: string): void => {
-    const inputPath = writeFile(
-      root,
-      filename,
-      JSON.stringify({
-        mode: "add",
-        title,
-        decidedBy: "team",
-        background: `${title}の背景`,
-        options: ["A: 採用する", "B: 採用しない"],
-        conclusion: `${title}を採用する`,
-        rationale: `${title}が要件に合うため`,
-        impact
-      })
-    )
-    const staged = runCli(["stage-adr", "--input", inputPath], root)
-    expect(staged.status, staged.stdout).toBe(0)
-    const stagedJson = staged.json as Record<string, unknown>
-    expect(stagedJson.ok).toBe(true)
-
-    const committed = runCli(
-      ["commit-architecture", "--staging-id", stagedJson.stagingId as string],
-      root
-    )
-    expect(committed.status, committed.stdout).toBe(0)
-    expect((committed.json as Record<string, unknown>).written).toBe(true)
-  }
-
-  addAdr("adr-1.json", "最初の判断", "最初の影響範囲。")
-  addAdr("adr-2.json", "2 番目の判断", "2 番目の影響範囲。")
-
-  const after = fs.readFileSync(architecture, "utf8")
-  expect(after.startsWith(ARCHITECTURE)).toBe(true)
-  expect(after).toContain(
-    "最初の影響範囲。\n\n---\n\n### ADR-002: 2 番目の判断"
-  )
-  expect(after.match(/\n\n---\n\n/g)).toHaveLength(1)
-
-  const listed = runCli(["get", "adr"], root)
-  expect(listed.status, listed.stdout).toBe(0)
-  const listedJson = listed.json as Record<string, unknown>
-  expect(listedJson.total).toBe(2)
-  const entries = listedJson.entries as Record<string, unknown>[]
-  expect(entries.map((entry) => entry.id)).toEqual(["ADR-001", "ADR-002"])
-  for (const entry of entries) {
-    const raw = String(entry.raw)
-    expect(
-      raw.split(/\r?\n/).some((line) => /^ {0,3}-{3,}[ \t]*$/.test(line))
-    ).toBe(false)
-  }
 })
 
 // ---------------------------------------------------------------------------
@@ -866,12 +577,13 @@ test("MAX_DIFF_LINES 以下なら省略されず unified がそのまま返る",
   expect(diff.unified as string).toContain("+- dep-added")
 })
 
-test("S9: kind 不一致の commit は staging_kind_mismatch で拒否され、対象ファイルは不変", () => {
+test("S9: 廃止した種別の staging は commit-architecture が受け付けず、対象ファイルは不変", () => {
   const root = project()
   const archPath = path.join(root, "docs", "ARCHITECTURE.md")
   const before = fs.readFileSync(archPath, "utf8")
 
-  // architecture の stagingId を commit-gotchas へ渡す。
+  // 改修前の stage-adr が残した staging を模す。recordHash も打ち直し、改竄ではなく
+  // 廃止した種別として unknown_id で拒否されることを確かめる。
   const archInput = writeFile(
     root,
     "a.json",
@@ -879,31 +591,130 @@ test("S9: kind 不一致の commit は staging_kind_mismatch で拒否され、�
       sections: [{ heading: "システム概要", body: "新しい概要。" }]
     })
   )
-  const archStaged = runCli(["stage-architecture", "--input", archInput], root)
-  const wrong = runCli(
-    [
-      "commit-gotchas",
-      "--staging-id",
-      (archStaged.json as Record<string, unknown>).stagingId as string
-    ],
-    root
+  const staged = runCli(["stage-architecture", "--input", archInput], root)
+  const stagingId = (staged.json as Record<string, unknown>).stagingId as string
+  const recordPath = path.join(stagingDirFor(root), `${stagingId}.json`)
+  const record = JSON.parse(fs.readFileSync(recordPath, "utf8"))
+  const legacy = { ...record, kind: "adr" }
+  legacy.recordHash = computeRecordHash(legacy)
+  fs.writeFileSync(recordPath, JSON.stringify(legacy))
+
+  const run = runCli(["commit-architecture", "--staging-id", stagingId], root)
+  expect(run.status).toBe(1)
+  expect(run.json).toMatchObject({ ok: false, error: "unknown_id" })
+  expect(fs.readFileSync(archPath, "utf8")).toBe(before)
+})
+
+test("S12: ロックが取られている間、commit-architecture は lock_timeout で失敗し、書き換えない", () => {
+  const root = project()
+  const archPath = path.join(root, "docs", "ARCHITECTURE.md")
+  const before = fs.readFileSync(archPath, "utf8")
+  const input = writeFile(
+    root,
+    "a.json",
+    JSON.stringify({
+      sections: [{ heading: "システム概要", body: "新しい概要。" }]
+    })
   )
-  expect(wrong.status).not.toBe(0)
-  expect((wrong.json as Record<string, unknown>).error).toBe(
-    "staging_kind_mismatch"
-  )
+  const staged = runCli(["stage-architecture", "--input", input], root)
+  const stagingId = (staged.json as Record<string, unknown>).stagingId as string
+  fs.writeFileSync(lockPathFor(archPath), "held\n")
+
+  const run = runCli(["commit-architecture", "--staging-id", stagingId], root)
+  expect(run.status).toBe(1)
+  expect(run.json).toMatchObject({ ok: false, error: "lock_timeout" })
   expect(fs.readFileSync(archPath, "utf8")).toBe(before)
 
-  // 拒否された staging は消費されていない。正しいコマンドなら通る。
-  const ok = runCli(
-    [
-      "commit-architecture",
-      "--staging-id",
-      (archStaged.json as Record<string, unknown>).stagingId as string
-    ],
+  // ロックが外れれば、同じ staging で書き込める。
+  fs.rmSync(lockPathFor(archPath))
+  const ok = runCli(["commit-architecture", "--staging-id", stagingId], root)
+  expect(ok.status).toBe(0)
+})
+
+test("S13: 廃止したサブコマンドは unknown_subcommand で終了コード 2、get の対象は unknown_target で終了コード 0", () => {
+  const root = project()
+  const before = snapshot([path.join(root, "docs", "ARCHITECTURE.md")])
+  for (const subcommand of [
+    "stage-adr",
+    "stage-gotcha",
+    "commit-gotchas",
+    "init-gotchas",
+    "append-gotcha",
+    "tag-gotcha",
+    "scan-adr-candidates",
+    "shrink-adr-candidate",
+    "scan-gotcha-candidates",
+    "remove-gotcha-candidate"
+  ]) {
+    const run = runCli([subcommand], root)
+    expect(run.status, subcommand).toBe(2)
+    expect(run.json, subcommand).toMatchObject({
+      ok: false,
+      error: "unknown_subcommand"
+    })
+  }
+  for (const target of ["adr", "gotchas", "gotchas-template"]) {
+    const run = runCli(["get", target], root)
+    expect(run.status, target).toBe(0)
+    expect(run.json, target).toMatchObject({
+      ok: false,
+      error: "unknown_target"
+    })
+  }
+  expectUnchanged(before)
+})
+
+test("S14: get config は gotchas と features を返さず、案内は残るサブコマンドだけ", () => {
+  const root = project()
+  const run = runCli(["get", "config"], root)
+  const json = run.json as Record<string, unknown>
+  expect(json.gotchas).toBeUndefined()
+  expect(json.features).toBeUndefined()
+  expect(Object.keys(json.cli as Record<string, unknown>).sort()).toEqual([
+    "commitArchitecture",
+    "linkClaudeMd",
+    "path",
+    "stageArchitecture"
+  ])
+  expect(Object.keys(json.inputSchemas as Record<string, unknown>)).toEqual([
+    "stage-architecture"
+  ])
+})
+
+test("S15: 残った ## ADR 一覧 は diff-architecture が legacy_section を出し、stage-architecture の remove で消せる", () => {
+  const root = project()
+  const archPath = path.join(root, "docs", "ARCHITECTURE.md")
+  const original = fs.readFileSync(archPath, "utf8")
+  fs.writeFileSync(
+    archPath,
+    `${original.replace(/\n+$/, "")}\n\n## ADR 一覧\n\n### ADR-001: 古い判断\n`
+  )
+
+  const diff = runCli(["diff-architecture"], root)
+  const findings = (diff.json as Record<string, unknown>).findings as {
+    kind: string
+    section: string
+  }[]
+  expect(findings).toContainEqual(
+    expect.objectContaining({ kind: "legacy_section", section: "ADR 一覧" })
+  )
+
+  const input = writeFile(
+    root,
+    "remove.json",
+    JSON.stringify({ sections: [{ heading: "ADR 一覧", remove: true }] })
+  )
+  const staged = runCli(["stage-architecture", "--input", input], root)
+  expect(staged.status, staged.stdout).toBe(0)
+  const stagingId = (staged.json as Record<string, unknown>).stagingId as string
+  const committed = runCli(
+    ["commit-architecture", "--staging-id", stagingId],
     root
   )
-  expect(ok.status).toBe(0)
+  expect(committed.status, committed.stdout).toBe(0)
+  const after = fs.readFileSync(archPath, "utf8")
+  expect(after).not.toContain("## ADR 一覧")
+  expect(after.replace(/\n+$/, "")).toBe(original.replace(/\n+$/, ""))
 })
 
 test("S10: get config は rules を返さず、stage-rules / commit-rules / get rules は未知のコマンドになる", () => {
@@ -944,953 +755,6 @@ test("S11: 保護パス・テスト方針が無い ARCHITECTURE で diff-archite
   expect(missing).not.toContain("規約")
 })
 
-// ---------------------------------------------------------------------------
-// scan-adr-candidates / shrink-adr-candidate(codiel intent 駆動化の設計書 §6.11)
-// ---------------------------------------------------------------------------
-
-const CANDIDATE_ENTRY = [
-  "### 認証トークンはサーバーでだけ保持する [ADR 候補: frontend-3]",
-  "- 制約: ブラウザの保存領域に認証トークンを置かない",
-  "- 決定日: 2026-10-01",
-  "- 出典 intent: docs/intents/2026-09-30-login-rework.md",
-  "- 関連 ADR: なし(ADR 候補)",
-  "#### 背景",
-  "XSS でトークンが漏れた。",
-  "#### 検討した選択肢",
-  "1. localStorage",
-  "2. HttpOnly Cookie",
-  "#### 採用した結論",
-  "HttpOnly Cookie にする。",
-  "#### 理由",
-  "スクリプトから読めない。",
-  "#### 影響範囲",
-  "src/app/auth"
-]
-
-const CANDIDATE_REFERENCE = [
-  "### 認証トークンはサーバーでだけ保持する",
-  "- 制約: ブラウザの保存領域に認証トークンを置かない",
-  "- 関連 ADR: ADR-001(候補 ID: frontend-3)"
-]
-
-function durableDoc(entryLines: readonly string[]): string {
-  return [
-    "# frontend",
-    "",
-    "## 意図的な制約",
-    "",
-    ...entryLines,
-    "",
-    "## 出典",
-    "",
-    "なし",
-    ""
-  ].join("\n")
-}
-
-/** git リポジトリで、ARCHITECTURE と候補 frontend-3 を持つ持続層がある。 */
-function candidateProject(): { root: string; durable: string } {
-  const root = project()
-  execFileSync("git", ["init", "-q"], { cwd: root, stdio: "ignore" })
-  const durable = writeFile(
-    root,
-    "docs/intents/domains/frontend.md",
-    durableDoc(CANDIDATE_ENTRY)
-  )
-  return { root, durable }
-}
-
-function scanCandidates(root: string): Record<string, unknown>[] {
-  const run = runCli(["scan-adr-candidates"], root)
-  expect(run.status).toBe(0)
-  const json = run.json as Record<string, unknown>
-  return json.candidates as Record<string, unknown>[]
-}
-
-/** 候補 frontend-3 を stage-adr → commit-architecture で ADR-001 にする。 */
-function adoptCandidate(root: string): void {
-  const inputPath = writeFile(
-    root,
-    "adr-input.json",
-    JSON.stringify({
-      mode: "add",
-      title: "認証トークンはサーバーでだけ保持する",
-      decidedBy: "team",
-      background: [
-        "XSS でトークンが漏れた。",
-        "- 出典 intent: docs/intents/2026-09-30-login-rework.md",
-        "ADR 候補 ID: frontend-3"
-      ].join("\n"),
-      options: ["localStorage", "HttpOnly Cookie"],
-      conclusion: "HttpOnly Cookie にする。",
-      rationale: "スクリプトから読めない。",
-      impact: "src/app/auth"
-    })
-  )
-  const staged = runCli(["stage-adr", "--input", inputPath], root)
-  expect(staged.status).toBe(0)
-  const stagingId = (staged.json as Record<string, unknown>).stagingId
-  const committed = runCli(
-    ["commit-architecture", "--staging-id", stagingId as string],
-    root
-  )
-  expect(committed.status).toBe(0)
-}
-
-function shrinkArgs(
-  file: string,
-  adr: string,
-  hash: string | undefined
-): string[] {
-  const args = [
-    "shrink-adr-candidate",
-    "--file",
-    file,
-    "--candidate-id",
-    "frontend-3",
-    "--adr",
-    adr
-  ]
-  return hash === undefined ? args : [...args, "--hash", hash]
-}
-
-test("scan-adr-candidates は git リポジトリの外では走査せず exit 0 で空を返す", () => {
-  const root = mkTmp()
-  writeFile(
-    root,
-    "docs/intents/domains/frontend.md",
-    durableDoc(CANDIDATE_ENTRY)
-  )
-
-  const run = runCli(["scan-adr-candidates"], root)
-
-  expect(run.status).toBe(0)
-  expect(run.json).toMatchObject({
-    command: "scan-adr-candidates",
-    ok: true,
-    repoRoot: null,
-    candidates: []
-  })
-})
-
-test("stage-adr と commit-architecture は持続層に触れず、確定した ADR を adoptedAs が指し、shrink-adr-candidate が exit 0 で縮める", () => {
-  const { root, durable } = candidateProject()
-  const [candidate] = scanCandidates(root)
-  expect(candidate.candidateId).toBe("frontend-3")
-  expect(candidate.adoptedAs).toBeNull()
-
-  const beforeAdr = snapshot([durable])
-  adoptCandidate(root)
-  expectUnchanged(beforeAdr)
-  expect(scanCandidates(root)[0].adoptedAs).toBe("ADR-001")
-
-  const args = shrinkArgs(
-    candidate.file as string,
-    "ADR-001",
-    candidate.hash as string
-  )
-  const shrunk = runCli(args, root)
-  expect(shrunk.status).toBe(0)
-  expect(shrunk.json).toMatchObject({
-    command: "shrink-adr-candidate",
-    ok: true,
-    written: true,
-    alreadyShrunk: false,
-    file: durable,
-    candidateId: "frontend-3",
-    adr: "ADR-001"
-  })
-  expect(fs.readFileSync(durable, "utf8")).toBe(durableDoc(CANDIDATE_REFERENCE))
-  expect(scanCandidates(root)).toStrictEqual([])
-
-  // 既に参照形なら何もせず exit 0。
-  const beforeRetry = snapshot([durable])
-  const again = runCli(args, root)
-  expect(again.status).toBe(0)
-  expect(again.json).toMatchObject({
-    ok: true,
-    written: false,
-    alreadyShrunk: true
-  })
-  expectUnchanged(beforeRetry)
-})
-
-test("shrink-adr-candidate の拒否は終了コード 3 と shrinkPending を返し、持続層を変えない", () => {
-  const { root, durable } = candidateProject()
-  const [candidate] = scanCandidates(root)
-  adoptCandidate(root)
-  const outside = writeFile(
-    root,
-    "docs/intents/frontend.md",
-    durableDoc(CANDIDATE_ENTRY)
-  )
-  const hash = candidate.hash as string
-
-  const cases = [
-    { error: "hash_mismatch", file: durable, adr: "ADR-001", hash: "0" },
-    { error: "adr_not_found", file: durable, adr: "ADR-009", hash },
-    { error: "outside_domains_dir", file: outside, adr: "ADR-001", hash }
-  ]
-  for (const c of cases) {
-    const before = snapshot([durable, outside])
-    const run = runCli(shrinkArgs(c.file, c.adr, c.hash), root)
-    expect(run.status, c.error).toBe(3)
-    expect(run.json, c.error).toMatchObject({
-      ok: false,
-      error: c.error,
-      written: false,
-      shrinkPending: { file: c.file, candidateId: "frontend-3", adr: c.adr }
-    })
-    expectUnchanged(before)
-  }
-})
-
-test("shrink-adr-candidate の書き込みの失敗も終了コード 3 と shrinkPending を返す", () => {
-  if (process.getuid?.() === 0) return // root は権限を無視するため検証にならない
-  const { root, durable } = candidateProject()
-  const [candidate] = scanCandidates(root)
-  adoptCandidate(root)
-  const dir = path.dirname(durable)
-  const before = snapshot([durable])
-
-  fs.chmodSync(dir, 0o555)
-  let run: CliRun
-  try {
-    run = runCli(shrinkArgs(durable, "ADR-001", candidate.hash as string), root)
-  } finally {
-    fs.chmodSync(dir, 0o755)
-  }
-
-  expect(run.status).toBe(3)
-  expect(run.json).toMatchObject({
-    ok: false,
-    error: "write_failed",
-    shrinkPending: { file: durable, candidateId: "frontend-3", adr: "ADR-001" }
-  })
-  expectUnchanged(before)
-  expect(fs.readdirSync(dir)).toStrictEqual(["frontend.md"])
-})
-
-test("shrink-adr-candidate のオプションが欠けると終了コード 2 で、shrinkPending を返さない", () => {
-  const { root, durable } = candidateProject()
-  const before = snapshot([durable])
-
-  const run = runCli(shrinkArgs(durable, "ADR-001", undefined), root)
-
-  expect(run.status).toBe(2)
-  expect(run.json).toMatchObject({ ok: false, error: "missing_option" })
-  expect((run.json as Record<string, unknown>).shrinkPending).toBeUndefined()
-  expectUnchanged(before)
-})
-
-test("domains が外部へのリンクなら、scan-adr-candidates は走査せず、shrink-adr-candidate は終了コード 3 で outside_domains_dir になる", () => {
-  const root = project()
-  execFileSync("git", ["init", "-q"], { cwd: root, stdio: "ignore" })
-  const external = mkTmp()
-  const externalFile = writeFile(
-    external,
-    "frontend.md",
-    durableDoc(CANDIDATE_ENTRY)
-  )
-  fs.mkdirSync(path.join(root, "docs/intents"), { recursive: true })
-  fs.symlinkSync(external, path.join(root, "docs/intents/domains"))
-  const before = snapshot([externalFile])
-
-  expect(scanCandidates(root)).toStrictEqual([])
-  const run = runCli(shrinkArgs(externalFile, "ADR-001", "0"), root)
-
-  expect(run.status).toBe(3)
-  expect(run.json).toMatchObject({
-    ok: false,
-    error: "outside_domains_dir",
-    written: false,
-    shrinkPending: { file: externalFile, candidateId: "frontend-3" }
-  })
-  expectUnchanged(before)
-})
-
-// ---------------------------------------------------------------------------
-// scan-gotcha-candidates / remove-gotcha-candidate(記録のタイミングとサブエージェントへの
-// 注入の設計書 2-1)
-// ---------------------------------------------------------------------------
-
-const GOTCHA_CANDIDATE_ENTRY = [
-  "### キャッシュを消し忘れた [GOTCHAS 候補]",
-  "- date: 2026-10-01",
-  "- run: login-rework try-2",
-  "- task: ログイン画面を直す",
-  "- mistake: ビルドのキャッシュを消さずに確認した",
-  "- cause: 古い成果物が残っていた(推測)",
-  "- countermeasure: 確認の前に pnpm run clean を実行する",
-  "- promotionCandidate: Yes"
-]
-
-function gotchaDurableDoc(parent: string): string {
-  return [
-    "# frontend",
-    "",
-    `## ${parent}`,
-    "",
-    ...GOTCHA_CANDIDATE_ENTRY,
-    "",
-    "## 出典",
-    "",
-    "なし",
-    ""
-  ].join("\n")
-}
-
-/** git リポジトリで、ARCHITECTURE と GOTCHAS 候補を持つ持続層がある。 */
-function gotchaCandidateProject(parent = "GOTCHAS 候補"): {
-  root: string
-  durable: string
-} {
-  const root = project()
-  execFileSync("git", ["init", "-q"], { cwd: root, stdio: "ignore" })
-  const durable = writeFile(
-    root,
-    "docs/intents/domains/frontend.md",
-    gotchaDurableDoc(parent)
-  )
-  return { root, durable }
-}
-
-function scanGotchaCandidates(root: string): Record<string, unknown>[] {
-  const run = runCli(["scan-gotcha-candidates"], root)
-  expect(run.status).toBe(0)
-  const json = run.json as Record<string, unknown>
-  return json.candidates as Record<string, unknown>[]
-}
-
-function removeArgs(
-  file: string,
-  hash: string | undefined,
-  fileHash: string | undefined
-): string[] {
-  const args = ["remove-gotcha-candidate", "--file", file]
-  if (hash !== undefined) args.push("--hash", hash)
-  if (fileHash !== undefined) args.push("--file-hash", fileHash)
-  return args
-}
-
-test("scan-gotcha-candidates は git リポジトリの外では走査せず exit 0 で空を返す", () => {
-  const root = mkTmp()
-  writeFile(
-    root,
-    "docs/intents/domains/frontend.md",
-    gotchaDurableDoc("GOTCHAS 候補")
-  )
-
-  const run = runCli(["scan-gotcha-candidates"], root)
-
-  expect(run.status).toBe(0)
-  expect(run.json).toMatchObject({
-    command: "scan-gotcha-candidates",
-    ok: true,
-    repoRoot: null,
-    candidates: []
-  })
-})
-
-test("scan-gotcha-candidates は候補を返し、台帳に同じタイトルがあれば ledgerMatches に ID が出る", () => {
-  const { root, durable } = gotchaCandidateProject()
-  const before = snapshot([durable])
-
-  const run = runCli(["scan-gotcha-candidates"], root)
-
-  expect(run.status).toBe(0)
-  expect(run.json).toMatchObject({
-    command: "scan-gotcha-candidates",
-    ok: true,
-    repoRoot: root,
-    warnings: []
-  })
-  const [candidate] = (run.json as Record<string, unknown>)
-    .candidates as Record<string, unknown>[]
-  expect(candidate).toMatchObject({
-    file: durable,
-    relative: "docs/intents/domains/frontend.md",
-    heading: "### キャッシュを消し忘れた [GOTCHAS 候補]",
-    title: "キャッシュを消し忘れた",
-    fields: {
-      date: "2026-10-01",
-      run: "login-rework try-2",
-      task: "ログイン画面を直す",
-      promotionCandidate: "Yes"
-    },
-    problems: [],
-    ledgerMatches: []
-  })
-  expect(candidate.hash).toMatch(/^[0-9a-f]{64}$/)
-  expect(candidate.fileHash).toMatch(/^[0-9a-f]{64}$/)
-  expectUnchanged(before)
-
-  writeFile(
-    root,
-    "docs/GOTCHAS.md",
-    `${GOTCHAS}\n### [2026-08-11] GOTCHA-002: キャッシュを消し忘れた\n\n**タスク**: t\n**失敗内容**: m\n**原因 (推測)**: c\n**対策**: p\n**昇格候補**: No\n`
-  )
-  expect(scanGotchaCandidates(root)[0].ledgerMatches).toStrictEqual([
-    "GOTCHA-002"
-  ])
-})
-
-test("remove-gotcha-candidate は exit 0 でエントリを消し、空になった `## GOTCHAS 候補` も消す", () => {
-  const { root, durable } = gotchaCandidateProject()
-  const [candidate] = scanGotchaCandidates(root)
-
-  const run = runCli(
-    removeArgs(
-      candidate.file as string,
-      candidate.hash as string,
-      candidate.fileHash as string
-    ),
-    root
-  )
-
-  expect(run.status).toBe(0)
-  expect(run.json).toMatchObject({
-    command: "remove-gotcha-candidate",
-    ok: true,
-    written: true,
-    file: durable,
-    title: "キャッシュを消し忘れた"
-  })
-  expect(fs.readFileSync(durable, "utf8")).toBe(
-    "# frontend\n\n## 出典\n\nなし\n"
-  )
-  expect(scanGotchaCandidates(root)).toStrictEqual([])
-})
-
-test("remove-gotcha-candidate は親が `## GOTCHAS 候補` 以外なら見出しを残す", () => {
-  const { root, durable } = gotchaCandidateProject("意図的な制約")
-  const [candidate] = scanGotchaCandidates(root)
-
-  const run = runCli(
-    removeArgs(
-      candidate.file as string,
-      candidate.hash as string,
-      candidate.fileHash as string
-    ),
-    root
-  )
-
-  expect(run.status).toBe(0)
-  expect(fs.readFileSync(durable, "utf8")).toBe(
-    "# frontend\n\n## 意図的な制約\n\n## 出典\n\nなし\n"
-  )
-})
-
-test("remove-gotcha-candidate の拒否は終了コード 3 と removePending を返し、持続層を変えない", () => {
-  const { root, durable } = gotchaCandidateProject()
-  const [candidate] = scanGotchaCandidates(root)
-  const outside = writeFile(
-    root,
-    "docs/intents/frontend.md",
-    gotchaDurableDoc("GOTCHAS 候補")
-  )
-  const hash = candidate.hash as string
-  const fileHash = candidate.fileHash as string
-
-  const cases = [
-    { error: "file_changed", file: durable, hash, fileHash: "0" },
-    { error: "candidate_not_found", file: durable, hash: "0", fileHash },
-    { error: "outside_domains_dir", file: outside, hash, fileHash },
-    {
-      error: "file_not_found",
-      file: path.join(root, "docs/intents/domains/none.md"),
-      hash,
-      fileHash
-    }
-  ]
-  for (const c of cases) {
-    const before = snapshot([durable, outside])
-    const run = runCli(removeArgs(c.file, c.hash, c.fileHash), root)
-    expect(run.status, c.error).toBe(3)
-    expect(run.json, c.error).toMatchObject({
-      ok: false,
-      error: c.error,
-      written: false,
-      removePending: { file: c.file, hash: c.hash }
-    })
-    expectUnchanged(before)
-  }
-})
-
-test("remove-gotcha-candidate は git リポジトリの外では not_git_repository で終了コード 3", () => {
-  const root = project()
-  const durable = writeFile(
-    root,
-    "docs/intents/domains/frontend.md",
-    gotchaDurableDoc("GOTCHAS 候補")
-  )
-  const before = snapshot([durable])
-
-  const run = runCli(removeArgs(durable, "0", "0"), root)
-
-  expect(run.status).toBe(3)
-  expect(run.json).toMatchObject({
-    ok: false,
-    error: "not_git_repository",
-    written: false
-  })
-  expectUnchanged(before)
-})
-
-test("remove-gotcha-candidate の書き込みの失敗も終了コード 3 と removePending を返す", () => {
-  if (process.getuid?.() === 0) return // root は権限を無視するため検証にならない
-  const { root, durable } = gotchaCandidateProject()
-  const [candidate] = scanGotchaCandidates(root)
-  const dir = path.dirname(durable)
-  const before = snapshot([durable])
-
-  fs.chmodSync(dir, 0o555)
-  let run: CliRun
-  try {
-    run = runCli(
-      removeArgs(
-        durable,
-        candidate.hash as string,
-        candidate.fileHash as string
-      ),
-      root
-    )
-  } finally {
-    fs.chmodSync(dir, 0o755)
-  }
-
-  expect(run.status).toBe(3)
-  expect(run.json).toMatchObject({
-    ok: false,
-    error: "write_failed",
-    written: false,
-    removePending: { file: durable, hash: candidate.hash }
-  })
-  expectUnchanged(before)
-  expect(fs.readdirSync(dir)).toStrictEqual(["frontend.md"])
-})
-
-test("remove-gotcha-candidate のオプションが欠けると終了コード 2 で、removePending を返さない", () => {
-  const { root, durable } = gotchaCandidateProject()
-  const [candidate] = scanGotchaCandidates(root)
-  const before = snapshot([durable])
-
-  for (const args of [
-    removeArgs(durable, candidate.hash as string, undefined),
-    removeArgs(durable, undefined, candidate.fileHash as string),
-    ["remove-gotcha-candidate"]
-  ]) {
-    const run = runCli(args, root)
-    expect(run.status).toBe(2)
-    expect(run.json).toMatchObject({ ok: false, error: "missing_option" })
-    expect((run.json as Record<string, unknown>).removePending).toBeUndefined()
-  }
-  expectUnchanged(before)
-})
-
-// ---------------------------------------------------------------------------
-// 2 変数による書き込みのゲート(設計書 2026-10-08 の 3-2・受け入れ基準 A4〜A6)
-// ---------------------------------------------------------------------------
-
-const NONE: Features = { adr: false, gotchas: false }
-
-interface GatedInvocation {
-  feature: "adr" | "gotchas"
-  args: string[]
-}
-
-// --input と --file には存在しないパスを渡す。ゲートが入力を読む前に拒否するなら、
-// 読めない入力の拒否(終了コード 2)ではなく、無効の拒否(終了コード 1)になる。
-function gatedInvocations(root: string): GatedInvocation[] {
-  const missing = path.join(root, "does-not-exist.json")
-  return [
-    { feature: "adr", args: ["stage-adr", "--input", missing] },
-    {
-      feature: "adr",
-      args: [
-        "shrink-adr-candidate",
-        "--file",
-        missing,
-        "--candidate-id",
-        "frontend-3",
-        "--adr",
-        "ADR-001",
-        "--hash",
-        "0"
-      ]
-    },
-    { feature: "gotchas", args: ["stage-gotcha", "--input", missing] },
-    { feature: "gotchas", args: ["commit-gotchas", "--staging-id", "unknown"] },
-    { feature: "gotchas", args: ["init-gotchas"] },
-    { feature: "gotchas", args: ["append-gotcha", "--input", missing] },
-    {
-      feature: "gotchas",
-      args: [
-        "tag-gotcha",
-        "--id",
-        "GOTCHA-001",
-        "--tag",
-        "解決済み",
-        "--reason",
-        "直した"
-      ]
-    },
-    {
-      feature: "gotchas",
-      args: [
-        "remove-gotcha-candidate",
-        "--file",
-        missing,
-        "--hash",
-        "0",
-        "--file-hash",
-        "0"
-      ]
-    }
-  ]
-}
-
-function gateProject(): string {
-  const root = project()
-  writeFile(root, "docs/GOTCHAS.md", GOTCHAS)
-  return root
-}
-
-function expectFeatureDisabled(
-  run: CliRun,
-  feature: "adr" | "gotchas",
-  where: string
-): void {
-  const env = feature === "adr" ? ADR_ENV : GOTCHAS_ENV
-  expect(run.status, where).toBe(1)
-  const json = run.json as Record<string, unknown>
-  expect(json, `${where}: stdout が JSON ではない`).not.toBeNull()
-  expect(json.ok, where).toBe(false)
-  expect(json.error, where).toBe("feature_disabled")
-  expect(json.written, where).toBe(false)
-  expect(json.env, where).toBe(env)
-  expect(json.message, where).toContain(env)
-  expect(json.message, where).toContain("1")
-  // 終了コード 3 の契約(やり直しの合図)は返さない
-  expect(json.shrinkPending, where).toBeUndefined()
-  expect(json.removePending, where).toBeUndefined()
-}
-
-test("FG1: 無効な側の書き込みは入力を読む前に終了コード 1 で拒否し、ファイルを変えない(A4)", () => {
-  const root = gateProject()
-  const { architecture, gotchas } = docs(root)
-  for (const invocation of gatedInvocations(root)) {
-    const only: Features = {
-      adr: invocation.feature !== "adr",
-      gotchas: invocation.feature !== "gotchas"
-    }
-    for (const features of [only, NONE]) {
-      const where = `${invocation.args[0]}(ADR ${features.adr} / GOTCHAS ${features.gotchas})`
-      const before = snapshot([architecture, gotchas])
-      const run = runCli(invocation.args, root, features)
-      expectFeatureDisabled(run, invocation.feature, where)
-      expectUnchanged(before)
-    }
-  }
-  // staging も作られていない
-  expect(fs.existsSync(stagingDirFor(root))).toBe(false)
-})
-
-test("FG2: 有効な側のサブコマンドはもう一方の変数に左右されない", () => {
-  const root = gateProject()
-  for (const invocation of gatedInvocations(root)) {
-    const features: Features = {
-      adr: invocation.feature === "adr",
-      gotchas: invocation.feature === "gotchas"
-    }
-    const run = runCli(invocation.args, root, features)
-    expect(
-      (run.json as Record<string, unknown>).error,
-      invocation.args[0]
-    ).not.toBe("feature_disabled")
-  }
-})
-
-test("FG3: ADR が無効なら adr の staging の commit-architecture を拒否し、staging を消費しない", () => {
-  const root = project()
-  const { architecture } = docs(root)
-  const inputPath = writeFile(
-    root,
-    "adr-input.json",
-    JSON.stringify({
-      mode: "add",
-      title: "ゲートの検証",
-      decidedBy: "team",
-      background: "背景",
-      options: ["A", "B"],
-      conclusion: "A にする。",
-      rationale: "理由",
-      impact: "影響"
-    })
-  )
-  const staged = runCli(["stage-adr", "--input", inputPath], root, BOTH_ON)
-  expect(staged.status).toBe(0)
-  const stagingId = (staged.json as Record<string, unknown>).stagingId as string
-
-  const before = snapshot([architecture])
-  for (const features of [{ adr: false, gotchas: true }, NONE]) {
-    const rejected = runCli(
-      ["commit-architecture", "--staging-id", stagingId],
-      root,
-      features
-    )
-    expectFeatureDisabled(rejected, "adr", "commit-architecture")
-    expectUnchanged(before)
-  }
-
-  // staging が残っているので、有効にすれば同じ id で commit できる
-  const committed = runCli(
-    ["commit-architecture", "--staging-id", stagingId],
-    root,
-    { adr: true, gotchas: false }
-  )
-  expect(committed.status).toBe(0)
-  expect(fs.readFileSync(architecture, "utf8")).toContain("ゲートの検証")
-})
-
-test("FG4: ADR が無効でも architecture の staging は commit-architecture で反映できる", () => {
-  const root = project()
-  const inputPath = writeFile(
-    root,
-    "arch-input.json",
-    JSON.stringify({
-      sections: [{ heading: "技術スタック", body: "- TypeScript\n- Rust" }]
-    })
-  )
-  const staged = runCli(
-    ["stage-architecture", "--input", inputPath],
-    root,
-    NONE
-  )
-  expect(staged.status).toBe(0)
-  const committed = runCli(
-    [
-      "commit-architecture",
-      "--staging-id",
-      (staged.json as Record<string, unknown>).stagingId as string
-    ],
-    root,
-    NONE
-  )
-  expect(committed.status).toBe(0)
-  expect(fs.readFileSync(docs(root).architecture, "utf8")).toContain("- Rust")
-})
-
-test("FG5: 2 変数が無効でも読み取り系は従来どおり exit 0 で返る(A5)", () => {
-  const root = gateProject()
-  execFileSync("git", ["init", "-q"], { cwd: root, stdio: "ignore" })
-  for (const args of [
-    ...READ_INVOCATIONS,
-    ["scan-adr-candidates"],
-    ["scan-gotcha-candidates"]
-  ]) {
-    const where = args.join(" ")
-    const both = runCli(args, root, BOTH_ON)
-    const none = runCli(args, root, NONE)
-    expect(none.status, where).toBe(0)
-    expect((none.json as Record<string, unknown>).ok, where).toBe(
-      (both.json as Record<string, unknown>).ok
-    )
-  }
-  const gotchas = runCli(["get", "gotchas"], root, NONE)
-  expect(JSON.stringify(gotchas.json)).toContain("GOTCHA-001")
-})
-
-test("FG6: get config の features に 2 変数の判定結果が載る(A6)", () => {
-  const root = project()
-  for (const features of [
-    BOTH_ON,
-    { adr: true, gotchas: false },
-    { adr: false, gotchas: true },
-    NONE
-  ]) {
-    const run = runCli(["get", "config"], root, features)
-    expect(run.status).toBe(0)
-    expect((run.json as Record<string, unknown>).features).toEqual(features)
-  }
-})
-
-test("FG7: ADR が無効なら diff-architecture は ## ADR 一覧 の欠落を section_missing にしない", () => {
-  const root = project()
-  const missingSections = (features: Features): unknown[] => {
-    const run = runCli(["diff-architecture"], root, features)
-    expect(run.status).toBe(0)
-    return (
-      (run.json as Record<string, unknown>).findings as {
-        kind: string
-        section?: string
-      }[]
-    )
-      .filter((f) => f.kind === "section_missing")
-      .map((f) => f.section)
-  }
-  expect(missingSections(BOTH_ON)).toContain("ADR 一覧")
-  const disabled = missingSections({ adr: false, gotchas: true })
-  expect(disabled).not.toContain("ADR 一覧")
-  // ほかの節の欠落は従来どおり出る
-  expect(disabled).toContain("レイヤー構造")
-})
-
-// ---------------------------------------------------------------------------
-// stage-gotcha → commit-gotchas(既存エントリのフィールドの書き換え)
-// ---------------------------------------------------------------------------
-
-function stageGotcha(root: string, input: unknown): CliRun {
-  const inputPath = writeFile(
-    root,
-    "gotcha-rewrite.json",
-    JSON.stringify(input)
-  )
-  return runCli(["stage-gotcha", "--input", inputPath], root)
-}
-
-test("GS1: stage-gotcha は書かずに diff を返し、commit-gotchas で書き込む。再 commit は already_used", () => {
-  const root = gateProject()
-  const { gotchas } = docs(root)
-  const before = fs.readFileSync(gotchas, "utf8")
-
-  const staged = stageGotcha(root, {
-    id: "GOTCHA-001",
-    mistake: "書き換えた失敗内容",
-    reason: "表現を直す"
-  })
-  expect(staged.status, staged.stdout).toBe(0)
-  const json = staged.json as Record<string, unknown>
-  expect(json).toMatchObject({
-    ok: true,
-    valid: true,
-    id: "GOTCHA-001",
-    changed: ["mistake"]
-  })
-  const diff = json.diff as Record<string, unknown>
-  expect(diff.truncated).toBe(false)
-  expect(diff.unified as string).toContain("+**失敗内容**: 書き換えた失敗内容")
-  expect(typeof json.next).toBe("string")
-  // stage は書かない。
-  expect(fs.readFileSync(gotchas, "utf8")).toBe(before)
-
-  const stagingId = json.stagingId as string
-  const committed = runCli(["commit-gotchas", "--staging-id", stagingId], root)
-  expect(committed.status, committed.stdout).toBe(0)
-  expect(fs.readFileSync(gotchas, "utf8")).toBe(
-    before.replace("**失敗内容**: 間違えた", "**失敗内容**: 書き換えた失敗内容")
-  )
-
-  const again = runCli(["commit-gotchas", "--staging-id", stagingId], root)
-  expect(again.status).not.toBe(0)
-  expect(again.json).toMatchObject({ error: "already_used" })
-})
-
-test("GS2: kind の取り違えは staging_kind_mismatch で拒否され、staging は消費されない", () => {
-  const root = gateProject()
-  const { gotchas } = docs(root)
-  const before = fs.readFileSync(gotchas, "utf8")
-
-  const gotchaStaged = stageGotcha(root, {
-    id: "GOTCHA-001",
-    task: "別のタスク"
-  })
-  const gotchaId = (gotchaStaged.json as Record<string, unknown>)
-    .stagingId as string
-  for (const command of ["commit-architecture"]) {
-    const wrong = runCli([command, "--staging-id", gotchaId], root)
-    expect(wrong.status, command).not.toBe(0)
-    expect(wrong.json, command).toMatchObject({
-      error: "staging_kind_mismatch"
-    })
-  }
-  expect(fs.readFileSync(gotchas, "utf8")).toBe(before)
-
-  // 拒否された gotchas の staging は、正しいコマンドなら通る。
-  const ok = runCli(["commit-gotchas", "--staging-id", gotchaId], root)
-  expect(ok.status, ok.stdout).toBe(0)
-  expect(fs.readFileSync(gotchas, "utf8")).toContain("**タスク**: 別のタスク")
-})
-
-test("GS3: stage 後に台帳が変わると commit-gotchas は file_changed で拒否し、書かない", () => {
-  const root = gateProject()
-  const { gotchas } = docs(root)
-
-  const staged = stageGotcha(root, {
-    id: "GOTCHA-001",
-    cause: "書き換えた原因"
-  })
-  const stagingId = (staged.json as Record<string, unknown>).stagingId as string
-  fs.appendFileSync(gotchas, "\n手で足した行\n")
-  const changed = fs.readFileSync(gotchas)
-
-  const run = runCli(["commit-gotchas", "--staging-id", stagingId], root)
-  expect(run.status).not.toBe(0)
-  expect(run.json).toMatchObject({ error: "file_changed", written: false })
-  expect(fs.readFileSync(gotchas).equals(changed)).toBe(true)
-})
-
-test("GS4: 台帳が無い・ID が無い・変更が無い入力は拒否し、stagingId を発行しない", () => {
-  const noLedger = project()
-  const missing = stageGotcha(noLedger, { id: "GOTCHA-001", task: "x" })
-  expect(missing.status).not.toBe(0)
-  expect(missing.json).toMatchObject({ error: "not_found", stagingId: null })
-
-  const root = gateProject()
-  for (const [input, error] of [
-    [{ id: "GOTCHA-099", task: "x" }, "not_found"],
-    [{ id: "GOTCHA-001" }, "invalid_input"],
-    [{ id: "GOTCHA-001", title: "[解決済み] 題" }, "invalid_input"]
-  ] as const) {
-    const run = stageGotcha(root, input)
-    expect(run.status, JSON.stringify(input)).not.toBe(0)
-    expect(run.json, JSON.stringify(input)).toMatchObject({
-      error,
-      stagingId: null
-    })
-  }
-  expect(fs.existsSync(stagingDirFor(root))).toBe(false)
-})
-
-test("GS5: 閉じていないフェンスのある台帳と、空にする入力は拒否し、台帳は不変", () => {
-  const root = gateProject()
-  const { gotchas } = docs(root)
-  fs.appendFileSync(gotchas, "\n```\n閉じないフェンス\n")
-  const before = snapshot([gotchas])
-  const unclosed = stageGotcha(root, { id: "GOTCHA-001", cause: "rewritten" })
-  expect(unclosed.status).not.toBe(0)
-  expect(unclosed.json).toMatchObject({
-    error: "invalid_input",
-    stagingId: null
-  })
-  expectUnchanged(before)
-
-  const clean = gateProject()
-  const empty = stageGotcha(clean, { id: "GOTCHA-001", cause: " " })
-  expect(empty.status).not.toBe(0)
-  expect(empty.json).toMatchObject({ error: "invalid_input", stagingId: null })
-})
-
-test("GS6: 飲み込まれた見出しのある台帳と、意味の無い値は拒否し、台帳は不変", () => {
-  const root = gateProject()
-  const { gotchas } = docs(root)
-  fs.appendFileSync(gotchas, "\n#### [2026-08-11] GOTCHA-002: 崩れた見出し\n")
-  const before = snapshot([gotchas])
-  const broken = stageGotcha(root, { id: "GOTCHA-001", cause: "rewritten" })
-  expect(broken.status).not.toBe(0)
-  expect(broken.json).toMatchObject({ error: "invalid_input", stagingId: null })
-  expectUnchanged(before)
-
-  const meaningless = stageGotcha(gateProject(), {
-    id: "GOTCHA-001",
-    cause: "-"
-  })
-  expect(meaningless.json).toMatchObject({
-    error: "invalid_input",
-    stagingId: null
-  })
-})
-
 test("LC1: link-claude-md は ARCHITECTURE が無ければ拒否し、あれば CLAUDE.md へ追記する", () => {
   const empty = mkTmp()
   writeFile(empty, "metatron.config.json", "{}")
@@ -1899,24 +763,17 @@ test("LC1: link-claude-md は ARCHITECTURE が無ければ拒否し、あれば 
   expect(refused.json).toMatchObject({ error: "architecture_missing" })
 
   const root = project()
-  writeFile(root, "docs/GOTCHAS.md", GOTCHAS)
+  writeFile(root, "docs/GOTCHAS.md", "# GOTCHAS\n")
   const linked = runCli(["link-claude-md"], root)
   expect(linked.status).toBe(0)
+  // GOTCHAS の台帳があっても足すのは ARCHITECTURE だけ。
   expect(fs.readFileSync(path.join(root, "CLAUDE.md"), "utf8")).toBe(
-    "@docs/ARCHITECTURE.md\n@docs/GOTCHAS.md\n"
+    "@docs/ARCHITECTURE.md\n"
   )
   // 設定ファイルがあるプロジェクトでは設定を書き換えない。
   expect(linked.json).toMatchObject({ configCreated: false })
   expect(fs.readFileSync(path.join(root, "metatron.config.json"), "utf8")).toBe(
     "{}"
-  )
-
-  // GOTCHAS の記録が無効なら GOTCHAS は足さない。
-  const off = project()
-  writeFile(off, "docs/GOTCHAS.md", GOTCHAS)
-  runCli(["link-claude-md"], off, { adr: false, gotchas: false })
-  expect(fs.readFileSync(path.join(off, "CLAUDE.md"), "utf8")).toBe(
-    "@docs/ARCHITECTURE.md\n"
   )
 })
 
@@ -1932,22 +789,31 @@ test("LC2: link-claude-md は metatron.config.json が無ければ最小の設�
   ).toStrictEqual({ version: 1 })
 })
 
-test("LC3: 空白を含むパスは飛ばして残りを追記し、既存の設定は上書きしない", () => {
+test("LC4: CLAUDE.md の書き込みに失敗したら、作った設定ファイルを消す", () => {
+  const root = mkTmp()
+  fs.mkdirSync(path.join(root, ".git"))
+  writeFile(root, "docs/ARCHITECTURE.md", ARCHITECTURE)
+  // CLAUDE.md がディレクトリだと書き込みに失敗する。
+  fs.mkdirSync(path.join(root, "CLAUDE.md"))
+  const r = runCli(["link-claude-md"], root)
+  expect(r.status).not.toBe(0)
+  expect(r.json).toMatchObject({ error: "write_failed", configCreated: false })
+  expect(fs.existsSync(path.join(root, "metatron.config.json"))).toBe(false)
+})
+
+test("LC3: 空白を含むパスは飛ばし、既存の設定は上書きしない", () => {
   const root = project()
-  writeFile(
-    root,
-    "metatron.config.json",
-    '{"version":1,"paths":{"gotchas":"my docs/G.md"}}'
-  )
-  writeFile(root, "my docs/G.md", GOTCHAS)
+  const config = '{"version":1,"paths":{"architecture":"my docs/A.md"}}'
+  writeFile(root, "metatron.config.json", config)
+  writeFile(root, "my docs/A.md", ARCHITECTURE)
   const linked = runCli(["link-claude-md"], root)
   expect(linked.status).toBe(0)
   expect(linked.json).toMatchObject({
-    added: ["docs/ARCHITECTURE.md"],
-    skipped: ["my docs/G.md"],
+    added: [],
+    skipped: ["my docs/A.md"],
     configCreated: false
   })
   expect(fs.readFileSync(path.join(root, "metatron.config.json"), "utf8")).toBe(
-    '{"version":1,"paths":{"gotchas":"my docs/G.md"}}'
+    config
   )
 })

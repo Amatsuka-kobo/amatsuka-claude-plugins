@@ -12,14 +12,13 @@
   独立に 2 回実装する**。写しが 2 つある状態が正常であり、共通ライブラリへの統合は不可能。
 - **唯一の機械的担保は codiel の 2 者比較テストとテスト R4**
   (`plugins/codiel/src/__test__/check-intent-env.test.ts` の `expectTwoWayMatch`、metatron 側は
-  `plugins/metatron/src/lib/__test__/config.test.ts` の R4-a〜f)。metatron の `loadConfig` / `extractDomains` と
+  `plugins/metatron/src/lib/__test__/config.test.ts` の R4-a〜g)。metatron の `loadConfig` / `extractDomains` と
   codiel の `resolveDocPaths` / `readDomainsResult` はテストから直接呼び、codiel の `check-intent-env` は
   トップレベル副作用を持つため子プロセスで起動して出力 JSON を突き合わせる。`check-intent-env` は
   `lib.ts` を import するので、実装としては metatron と codiel の 2 つを比べている。
   **このテストを消すと 2 実装のずれを検出する手段がゼロになる。**「重複テストだから」と削らない。
-- 契約を変更したら §15 のチェックリスト(2 実装 + metatron references 3 本 + codiel の
-  `references/intent-format.md` / `handoff-contract.md` と `preparing-design-agendas` の写し(codiel の `recording-gotchas` は
-  2026-09-27 に削除し、GOTCHAS の記録は metatron の `recording-gotchas` に委ねた) +
+- 契約を変更したら §15 のチェックリスト(2 実装 + metatron references 2 本(`config-schema.md`・`architecture-format.md`) + codiel の
+  `references/intent-format.md` / `handoff-contract.md` と `preparing-design-agendas` の写し +
   gh-utility `issue-craft` の写し + 2 者比較テスト)を同じコミットで更新する。
 
 ### 2 者比較テストが実際に比較している項目
@@ -29,7 +28,7 @@
 | 項目 | metatron 側の出所 | codiel `lib.ts` 側 | codiel `check-intent-env` 側 |
 | --- | --- | --- | --- |
 | `docRoot` | `loadConfig().docRoot` | `resolveDocPaths().docRoot` | `out.docRoot` |
-| ARCHITECTURE / GOTCHAS の解決パス | `architecturePath` / `gotchasPath` | `architecture` / `gotchas` | `projectDocs.*` |
+| ARCHITECTURE の解決パス | `architecturePath` | `architecture` | `projectDocs.architecture` |
 | 設定警告の有無と**件数** | `warnings` | `warnings` | `configWarnings`(下記の合算) |
 | ドメインマップの**値の deep equality** | `extractDomains().domains` | `readDomainsResult().domains` | (返さない) |
 | ドメインマップの可読性(真偽) | `extractDomains().ok` | `readDomains() !== null` | `projectDocs.domainsReadable` |
@@ -66,30 +65,31 @@
 - §3 ルート解決 `docRoot` = 開始ディレクトリから上方向に (1) `metatron.config.json` を持つ最近祖先
   → (2) `git rev-parse --show-toplevel` → (3) 開始ディレクトリ。**開始ディレクトリ自身を含む
   (inclusive)**、探索前に `fs.realpathSync` で実体化、git の失敗は原因を区別せず段 3 へ。
-  段 1 の探索は git の toplevel で打ち切る(2026-11-19、PR #41。親リポジトリの中の worktree が親の設定を拾わないため)。
-  `.git` の手作業探索で代替しない。解決結果はキャッシュしない。絶対パスと `..` 脱出は拒否。
-- §4-§8 ARCHITECTURE(9 セクション・セクション分割の規範アルゴリズム・`unclosed_fence` の 2 層扱い)、
-  ADR、GOTCHAS、文書パス既定値(`docs/ARCHITECTURE.md` / `docs/GOTCHAS.md`)。
+  規則 1 の細目(2026-11-19 の PR #41 と 2026-11-27 の PR #69 で確定):
+  開始ディレクトリに `metatron.config.json` があれば git を実行せずにそこを返す。
+  段 1 の探索は git の toplevel(自身を含む)で打ち切る(親リポジトリの中の worktree が親の設定を拾わないため)。
+  git を実行できないときは、`.git`(ディレクトリかファイル)を持つディレクトリ(自身を含む)で打ち切り、段 2 の値の代わりには使わない。
+  リポジトリの外に置いた設定ファイルは拾わない。
+  段 2 を `.git` の手作業探索で代替しない。解決結果はキャッシュしない。絶対パスと `..` 脱出は拒否。
+- §4-§8 ARCHITECTURE(8 セクション・セクション分割の規範アルゴリズム・`unclosed_fence` の 2 層扱い)、
+  文書パス既定値(`docs/ARCHITECTURE.md`)。表に無い見出しのセクションは `stage-architecture` の `{ heading, remove: true }` で削除できる。
   **2026-11-19(metatron 0.6.0)に rules(§5)を廃止した。** 保護パスとテスト方針は ARCHITECTURE のセクションへ戻し、
   規約は ARCHITECTURE で扱わず CLAUDE.md に書く。body に `## ` 見出しを含む `stage-architecture` は `invalid_body`。
-- §6 に ADR エントリ間の区切り（前後を空行で挟んだ `---`）の規定が 2026-09-16 に加わり、`stage-adr` が節全体に対して毎回正規化する。
+  **2026-11-27(metatron 0.6.1-dev、Issue #46)に §6 ADR と §7 GOTCHAS を廃止した。** 凍結文書には廃止前の書式が記録として残るだけで、実装の基準ではない。
+  `## ADR 一覧` は許可リストに無いセクションとして扱う。`paths.gotchas` は未知キーとして警告なしで無視する。
 - §9-§10 intent 文書と intent-issue v1。判定マーカーは本文中の `<!-- intent:v1 -->`(位置は問わない、
   完全一致のみ)。§10-3 に codiel `analyzing-issues` 用の issue.md 写像表(`analyzing-issues` と `issue.md` は 2026-09-27 に廃止。
   intent 書式 v2 と上書きの記録は `harness-docs/design/2026-09-27-codiel-intent-driven-design.md` §7.5)。**要約を伴う抽出をしない。**
 - §11 gh-utility `issue-craft` 持ち込みモードの固定開始句
   `持ち込みモード: 以下の完成済み本文で起票`。判定は固定句の一致のみ、推測で入らない。
-- §12 metatron CLI 入出力規約と staging・ロックの保証。staging は単一ターゲットである。
+- §12 metatron CLI 入出力規約と staging・ロックの保証。staging の種別は `architecture` だけで、廃止した種別の記録は `unknown_id` で拒否する。
 - §13 hook 出力形式。**フェイル方針はプラグインごとに違う**: metatron の両 hook はフェイルオープン、
   codiel の PreToolUse はフェイルクローズド(`ask`)。混同しない。
   metatron の SessionStart は 0.6.0 から文書の本文を注入せず、案内文だけを出す(SubagentStart は撤去)。
   文書は CLAUDE.md の @メンションで読み込ませる。案内を落とすのは設定読み取り自体が例外で失敗したときだけ。
-- `[ADR 候補]` の書式と参照形(2026-09-28)は、codiel の `references/intent-format.md` の「## 持続層」が正本の
-  共有ファイル契約である。metatron は `references/architecture-format.md` の「ADR 候補の取り込み」に、読み取りと縮約に
-  要る最小限(印の形、候補 ID の書式、エントリの範囲、5 つの小見出しの名前、参照形、ADR の背景に書く
-  「ADR 候補 ID: <候補 ID>」の行)だけを写す。書式を変えたら両プラグインの `format-change-checklist.md` に沿って追随させる。
-  書き込みは metatron の `scan-adr-candidates` / `shrink-adr-candidate`(`mem:metatron/core`)。
-  codiel 1.1.3(2026-11-19、PR #59)で `intent-format.md` から `[ADR 候補]` の書式と参照形を削除し、codiel は候補を書かなくなった。
-  metatron 側の写しと走査・縮約は #46 で削除するまで残る。codiel の `format-change-checklist.md` から metatron の写しを追随させる項目も削除済み。
+- `[ADR 候補]` の書式と参照形(2026-09-28)は共有ファイル契約だったが、codiel 1.1.3(2026-11-19、PR #59)が `intent-format.md` から、
+  metatron 0.6.1-dev(2026-11-27、PR #61)が `architecture-format.md` の写しと走査・縮約のコマンドから削除した。今は契約に含まれない。
+  持続層(`docs/intents/domains/`)の書式の正本は codiel の `references/intent-format.md`。
 - §14 実装間の一致検証(上記の 2 者比較)。`paths.rulesDir` と `injection` は 0.6.0 で撤去し、両実装とも未知キーとして無視する。
 
 ## 各実装の場所

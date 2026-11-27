@@ -103,7 +103,7 @@ export function globToRegExp(glob: string): RegExp {
 // ソースを共有せず同じ規則を独立に実装する。ここを変えたら契約 §14 の実装間一致テストを通す。
 //
 // codiel は基準の異なる 2 つのルート概念を持つ。関数名で区別し、混同しない。
-// 文書(ARCHITECTURE / GOTCHAS)の解決には findDocRoot を、codiel 固有資産
+// 文書(ARCHITECTURE)の解決には findDocRoot を、codiel 固有資産
 // (`.codiel/runs` 等)の解決には findProjectRoot を使う。どちらを使うかは
 // 「探しているものが文書か codiel 資産か」で決まる。同じ「ルート」という語で
 // 2 つの異なる基準を指していたことが、パス解決の不整合の温床であった。
@@ -112,15 +112,12 @@ export function globToRegExp(glob: string): RegExp {
 export const DOC_CONFIG_FILENAME = "metatron.config.json"
 export const DOC_CONFIG_SUPPORTED_VERSION = 1
 export const DEFAULT_ARCHITECTURE_PATH = "docs/ARCHITECTURE.md"
-export const DEFAULT_GOTCHAS_PATH = "docs/GOTCHAS.md"
 
 export interface DocPaths {
   /** 契約 §3 規則 1 で解決したルート(絶対パス)。 */
   docRoot: string
   /** ARCHITECTURE の絶対パス。 */
   architecture: string
-  /** GOTCHAS の絶対パス。 */
-  gotchas: string
   /**
    * 既定値へ落とした理由・設定を読めなかった理由(契約 §2・§3 規則 3)。
    * 空配列が正常。「設定ファイルが無い」は正常な状態なので警告にしない。
@@ -151,6 +148,15 @@ function existsSafe(target: string): boolean {
   }
 }
 
+function hasDocConfig(dir: string): boolean {
+  return existsSafe(path.join(dir, DOC_CONFIG_FILENAME))
+}
+
+// git を実行できないときの境界。worktree の `.git` はファイルなので、種別を問わない。
+function existsGit(dir: string): boolean {
+  return existsSafe(path.join(dir, ".git"))
+}
+
 // 契約 §3 規則 1 の段 2。必ず `git rev-parse --show-toplevel` を実行して得る。
 // `.git` の手作業探索で代替しない(worktree の .git ファイル形式や
 // GIT_CEILING_DIRECTORIES の挙動を再現できず、実装間で結果が割れるため)。
@@ -176,7 +182,8 @@ function gitToplevel(cwd: string): string | null {
 /**
  * 契約 §3 規則 1: 文書のルート解決。
  *
- * 1. `metatron.config.json` を持つ最も近い祖先ディレクトリ(開始ディレクトリ自身を含む)
+ * 1. `metatron.config.json` を持つ最も近い祖先ディレクトリ(開始ディレクトリ自身を含み、git の
+ *    toplevel より上は見ない)
  * 2. 無ければ `git rev-parse --show-toplevel`
  * 3. それも無ければ開始ディレクトリ
  *
@@ -186,20 +193,26 @@ function gitToplevel(cwd: string): string | null {
  *
  * 段 1 の探索は git の toplevel(段 2 の値)で打ち切る。親リポジトリの中に置いた
  * worktree が、親の設定ファイルを拾って親の文書を docRoot にしないためである。
+ * リポジトリの外に置いた設定ファイルは拾わない。
+ * git を実行できないときは、`.git`(ディレクトリかファイル)を持つディレクトリを境界にする。
+ * 開始ディレクトリに設定ファイルがあれば、git を実行せずにそこを返す。
  *
  * codiel 固有資産のルートを探すときは findProjectRoot を使う(基準が異なる)。
  */
 export function findDocRoot(startDir?: string): string {
   const start = realpathOrSelf(path.resolve(startDir ?? process.cwd()))
 
+  // 段 1 の最初の候補で決まるときは git を実行しない。
+  if (hasDocConfig(start)) return start
+
   const top = gitToplevel(start)
 
-  // 段 1: 開始ディレクトリ自身を候補に含める(inclusive)。git の toplevel 自身も候補に含め、
-  // その先へは進まない。git 管理外ならファイルシステムのルートまで辿る。
+  // 段 1: 開始ディレクトリから祖先を辿る。git の toplevel 自身も候補に含め、その先へは
+  // 進まない。git を実行できないときは `.git` を持つディレクトリで打ち切る。
   let dir = start
   while (true) {
-    if (existsSafe(path.join(dir, DOC_CONFIG_FILENAME))) return dir
-    if (top && dir === top) break
+    if (hasDocConfig(dir)) return dir
+    if (top ? dir === top : existsGit(dir)) break
     const parent = path.dirname(dir)
     // ファイルシステムのルートに達したら打ち切る。
     if (parent === dir) break
@@ -364,7 +377,8 @@ function loadPathsConfig(startDir?: string): {
  * 契約 §2・§3: 文書パスの解決。
  *
  * 内部で findDocRoot を呼び、`metatron.config.json` の `paths` を解釈して
- * ARCHITECTURE / GOTCHAS の絶対パスを返す。設定が無ければ既定値。
+ * ARCHITECTURE の絶対パスを返す。設定が無ければ既定値。
+ * 廃止した `paths.gotchas` は未知キーと同じく無視する(契約 §2)。
  * 解決結果はキャッシュしない(契約 §3 規則 4)。
  * 例外を投げない。読めない設定・壊れた設定はすべて既定値へ落とす。
  * 既定値へ落としたときは**理由を warnings で返す**(契約 §3 規則 3)。
@@ -379,13 +393,6 @@ export function resolveDocPaths(startDir?: string): DocPaths {
       paths?.architecture,
       DEFAULT_ARCHITECTURE_PATH,
       "architecture",
-      warnings
-    ),
-    gotchas: resolveConfiguredPath(
-      docRoot,
-      paths?.gotchas,
-      DEFAULT_GOTCHAS_PATH,
-      "gotchas",
       warnings
     ),
     warnings
@@ -602,7 +609,7 @@ export function readDomains(startDir: string): Record<string, string[]> | null {
 // 見つかればそのディレクトリを、見つからなければ startDir をそのまま返す(フォールバック)。
 // cwd がプロジェクトルートのサブディレクトリの場合でも、run 探索やフェーズ制御を
 // プロジェクトルート基準で行えるようにするためのもの。
-// 探しているものが**文書**(ARCHITECTURE / GOTCHAS)であれば、基準が異なるため findDocRoot を使う。
+// 探しているものが**文書**(ARCHITECTURE)であれば、基準が異なるため findDocRoot を使う。
 export function findProjectRoot(startDir: string): string {
   let dir = startDir
   while (true) {

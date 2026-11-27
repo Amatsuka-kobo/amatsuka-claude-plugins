@@ -65,7 +65,6 @@ function globToRegExp(glob) {
 var DOC_CONFIG_FILENAME = "metatron.config.json";
 var DOC_CONFIG_SUPPORTED_VERSION = 1;
 var DEFAULT_ARCHITECTURE_PATH = "docs/ARCHITECTURE.md";
-var DEFAULT_GOTCHAS_PATH = "docs/GOTCHAS.md";
 function isPlainObject(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -82,6 +81,12 @@ function existsSafe(target) {
   } catch {
     return false;
   }
+}
+function hasDocConfig(dir) {
+  return existsSafe(path.join(dir, DOC_CONFIG_FILENAME));
+}
+function existsGit(dir) {
+  return existsSafe(path.join(dir, ".git"));
 }
 function gitToplevel(cwd) {
   try {
@@ -101,11 +106,12 @@ function gitToplevel(cwd) {
 }
 function findDocRoot(startDir) {
   const start = realpathOrSelf(path.resolve(startDir ?? process.cwd()));
+  if (hasDocConfig(start)) return start;
   const top = gitToplevel(start);
   let dir = start;
   while (true) {
-    if (existsSafe(path.join(dir, DOC_CONFIG_FILENAME))) return dir;
-    if (top && dir === top) break;
+    if (hasDocConfig(dir)) return dir;
+    if (top ? dir === top : existsGit(dir)) break;
     const parent = path.dirname(dir);
     if (parent === dir) break;
     dir = parent;
@@ -213,13 +219,6 @@ function resolveDocPaths(startDir) {
       paths?.architecture,
       DEFAULT_ARCHITECTURE_PATH,
       "architecture",
-      warnings
-    ),
-    gotchas: resolveConfiguredPath(
-      docRoot,
-      paths?.gotchas,
-      DEFAULT_GOTCHAS_PATH,
-      "gotchas",
       warnings
     ),
     warnings

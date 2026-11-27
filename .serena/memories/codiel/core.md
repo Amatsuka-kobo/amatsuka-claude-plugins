@@ -1,24 +1,25 @@
-`plugins/codiel` (1.1.1) — intent-driven orchestrator: 変更ごとの intent 文書(`docs/intents/`)を起点に、
+`plugins/codiel` (1.1.7) — intent-driven orchestrator: 変更ごとの intent 文書(`docs/intents/`)を起点に、
 design discussion, planning, implementation, testing, intent-sync, PR and review を同梱の `raguel` MCP server の
 ゲートつきで進める。`/codiel:run` の入口は Issue 番号・intent パス・省略の 3 形で、GitHub を使えない環境は
 local モードで進む。 The largest plugin here. Flow spec: `plugins/codiel/docs/DESIGN.md`
 (§0 states the no-Anthropic-API invariant, `mem:core`); flowcharts were pulled out into
 `docs/skill-flowcharts.md` (commit 86b9483). MCP internals: `mem:codiel/raguel_mcp`.
 
-## 2026-08-16 の再編 — ARCHITECTURE / GOTCHAS は metatron の管轄になった
+## 2026-08-16 の再編 — ARCHITECTURE は metatron の管轄になった
 
-- **`docs/ARCHITECTURE.example.md` / `docs/GOTCHAS.example.md` は codiel から削除され metatron へ移った**
-  (`plugins/codiel/docs/` に残るのは `DESIGN.md` と `skill-flowcharts.md` の 2 本だけ)。
+- **`docs/ARCHITECTURE.example.md` は codiel から削除され metatron へ移った。**
 - **ドメインマップのマーカーは ` ```json metatron:domains ` に変わった。旧 `codiel:domains` は読まない**
   (互換読みを一切設けない)。書式・ルート解決の正本は `mem:file_contract`。
-- **GOTCHAS は新書式**: 本文は `タスク / 失敗内容 / 原因 (推測) / 対策 / 昇格候補` の 5 フィールドのみ。
-  関連ファイル欄・関連エントリ欄・Codiel フェーズ名欄は**持たない**(必要ならすべて `対策` の本文へ)。
-  タグは `[解決済み]` / `[対象外]` の 2 種だけを `GOTCHA-NNN:` の直後に置く。
-- `install-harness.sh` は **`.codiel/{runs,reports}` と `.codiel/config.json`(無ければ `{ "testsDir": "docs/codiel/tests", "runsDir": "docs/codiel/runs" }`。`raguel` と `.gitignore` の行は `initializing-harness` が承認を得て足す)を作るだけ**。GOTCHAS は生成せず、台帳の生成は metatron が担う。
+- `install-harness.sh` は **`.codiel/{runs,reports}` と `.codiel/config.json`(無ければ `{ "testsDir": "docs/codiel/tests", "runsDir": "docs/codiel/runs" }`。`raguel` と `.gitignore` の行は `initializing-harness` が承認を得て足す)を作るだけ**。ARCHITECTURE は生成しない。
   テストの仕様の置き場は config の `testsDir`(既定 `docs/codiel/tests`)の下にある。run の文書(agenda・discussion・design・dev-plan)は `<runsDir>/<slug>/` に try で分けずに置き、コミットする。
   try ごとの `state.json`・`steps/`・`reports/` は `.codiel/runs/<slug>/try-<n>/`、`/codiel:test` の報告は `.codiel/reports/` に置き、`.gitignore` で外す(2026-09-29、M4-C。ADR-009)。
   Raguel の設定は config.json の `raguel` にあり、以前の版の YAML の設定ファイルは読まれない(init が承認を得て写してから消す)。
-- K12(2026-10-02): codiel の指示層(skills・references・commands)は ARCHITECTURE と GOTCHAS を読ませる規則・書き込ませる規則を持たない。残すのは §0 のドメインマップの抽出(`mapped` / `unscoped` の判定と guard-write の境界)と、review の委譲に ARCHITECTURE のパスを渡すこと(doc 観点が乖離を見る)の 2 つだけ。失敗の記録の手順 `references/failures.md` と「未記録の GOTCHAS」の退避は削除済みで、台帳の追記は metatron の担当。guard-write の `unrecorded-gotchas.md` の免除も外した。2026-10-03 から(ADR-013): codiel は ADR と GOTCHAS を直接記録せず、候補を try のローカルレポート(`reports/adr-candidates.md`・`reports/gotcha-candidates.md`)に書いて metatron に渡す。state の `adrTarget` は `knowledgeTarget` に改名した(互換なし)。`intents` のときは intent-sync と finalize で持続層へ写す。手順は `orchestrating-runs/references/adr-candidates.md`・`gotcha-candidates.md`。2026-10-08 から(ADR-015): 候補を残すのは metatron の `AMATSUKA_METATRON_ENABLE_ADR` / `AMATSUKA_METATRON_ENABLE_GOTCHAS` が有効な種別だけ。`check-intent-env` が `knowledgeRecording` を出し、`codiel-state init` の必須引数 `--adr-candidates` / `--gotcha-candidates`(on/off)で state の `candidates` に固定する(項目の無い古い state は両方 false、resume で再判定しない)。ADR 候補が無効の run では 3 条件を満たす判断はどこにも残らない(仕様)。2026-11-19 から(1.1.3、PR #59): ADR 候補と GOTCHAS 候補を廃止し、ここまでの 2026-10-03・10-08 の記述は無効。失敗の記録はすべての run で手元の `reports/failure-records.md` に書き、intent-sync と finalize で領域ファイルの `## 失敗の記録` へ写す(手順は `orchestrating-runs/references/failure-records.md`。`adr-candidates.md`・`gotcha-candidates.md` は無い)。領域ファイルのキーは英語(`constraint`・`reason`・`sourceIntent`、失敗の記録は `date`・`run`・`task`・`mistake`・`cause`・`countermeasure`)。intent の「意図的な制約」は全行を取り込む。carry-over と fix-loop の修正判断は intent の `## 合意済み事項` に残す(fix-loop の分は `reports/fix-decisions.md` を経て finalize で写す)。state の `candidates`、init の `--adr-candidates`/`--gotcha-candidates`、`next-adr-candidate-id`、`check-intent-env` の `knowledgeRecording` は削除した(`candidates` を持つ古い state は読める)。`knowledgeTarget` は残る。改修前の `## GOTCHAS 候補`・`reports/gotcha-candidates.md` は読まず移行しない。`paths.gotchas` の削除は #46 で metatron と同時に行う。
+- K12(2026-10-02): codiel の指示層(skills・references・commands)は ARCHITECTURE を読ませる規則・書き込ませる規則を持たない。残すのは §0 のドメインマップの抽出(`mapped` / `unscoped` の判定と guard-write の境界)と、review の委譲に ARCHITECTURE のパスを渡すこと(doc 観点が乖離を見る)の 2 つだけ。codiel は ADR と GOTCHAS を記録しない。
+- 1.1.3(2026-11-19、PR #59): ADR 候補と GOTCHAS 候補(2026-10-03 の ADR-013、2026-10-08 の ADR-015 の手順を含む)を廃止した。失敗の記録はすべての run で手元の `reports/failure-records.md` に書き、intent-sync と finalize で領域ファイルの `## 失敗の記録` へ写す(手順は `orchestrating-runs/references/failure-records.md`)。領域ファイルのキーは英語(`constraint`・`reason`・`sourceIntent`、失敗の記録は `date`・`run`・`task`・`mistake`・`cause`・`countermeasure`)。intent の「意図的な制約」は全行を取り込む。carry-over と fix-loop の修正判断は intent の `## 合意済み事項` に残す(fix-loop の分は `reports/fix-decisions.md` を経て finalize で写す)。state の `candidates`、init の `--adr-candidates`/`--gotcha-candidates`、`next-adr-candidate-id`、`check-intent-env` の `knowledgeRecording` は削除した(`candidates` を持つ古い state は読める)。`knowledgeTarget` は残る。改修前の `## GOTCHAS 候補`・`reports/gotcha-candidates.md` は読まず移行しない。
+- 1.1.4(2026-11-27、Issue #46、PR #61): metatron の ADR 機能と GOTCHAS 機能の削除に追随した。`check-intent-env` の `projectDocs` は `architecture`・`metatronConfig`・`domainsReadable`・`domainCount` だけになり、`hooks/lib.ts` から `DEFAULT_GOTCHAS_PATH`・`DocPaths.gotchas`・`projectDocs.gotchas` を消した。`paths.gotchas` は未知キーとして警告なしで無視する。metatron との 2 者比較テストは gotchas を比べない。README・DESIGN・`/codiel:init`・`initializing-harness` から「GOTCHAS は metatron の台帳」の記述を消した。
+- 1.1.5(2026-11-27、Issue #47、PR #62): intent-sync が持続層の領域ファイルの古い記述を洗い出し、承認を得て改訂・削除する。手順は `skills/syncing-intents/references/persistent-layer.md`(洗い出し=手順 4、`mark-ask --kind confirm` での確認=手順 5、書き込み=手順 6)、設計書は `harness-docs/design/2026-11-27-codiel-intent-sync-revision-design.md`。対象は取り込み先の領域の `## 目的`・`## 意図的な制約`・`## 非ゴール`・`## 失敗の記録`。制約は今回の intent と design.md で合意した内容だけで古さを判定し、run の差分とだけ食い違うものは「違反」として別に聞く。結果は report.md の行(`写し`・`取り込み`・`改訂`・`削除`・`見送り`・`書かずに終えた矛盾`・`違反`)と領域ファイルの `## 由来` の添え書きに残す。残った指摘は Issue #67。
+- 1.1.6(2026-11-27、Issue #43、PR #69): 契約 §3 規則 1 の変更を `findDocRoot` に写した。開始ディレクトリに `metatron.config.json` があれば git を実行しない。git を実行できないときは `.git` を持つディレクトリで探索を打ち切る。`hooks/__test__/lib.test.ts` にケースを足し、metatron との一致は 2 者比較テストが見る。
+- 1.1.7(2026-11-27、Issue #67): PR #62 の 3 回目のレビューで残った指摘を直した。report.md の領域の行は `取り込み` を最後にして 1 回の追記で書く。違反の答えは `## 合意済み事項`・`## 変更履歴`・`## TOBE` へ反映し(制約の表には足さない)、制約の改訂を断ったら合意の行だけ消して履歴に取り消しの行を足す。incident の除外は同じ slug の全 try の `写し:` の行で見る。箇条書きへの移行を断ったセクションは `## 由来` に `見送り:` を添え、後の run は案を出さない。
 
 ## run のブランチは `codiel/<slug>` の 1 本(2026-10-05)
 
@@ -49,7 +50,7 @@ run 開始時に明示選択したモードである。選択したモードは 
 
 | 関数 (`src/hooks/lib.ts`) | 基準 | 用途 |
 | --- | --- | --- |
-| `findDocRoot(startDir)` | 契約 §3 規則 1(`metatron.config.json` を持つ祖先 → git ルート → 開始ディレクトリ) | **文書**(ARCHITECTURE / GOTCHAS)の解決 |
+| `findDocRoot(startDir)` | 契約 §3 規則 1(`metatron.config.json` を持つ祖先 → git ルート → 開始ディレクトリ。祖先の探索は git の toplevel で打ち切る) | **文書**(ARCHITECTURE)の解決 |
 | `findProjectRoot(startDir)` | `.codiel` を持つ祖先 | **codiel 固有資産**(`.codiel/runs` 等)の解決 |
 
 どちらを使うかは「探しているものが文書か codiel 資産か」で決まる。
@@ -140,7 +141,7 @@ intent-sync フェーズは `skills/syncing-intents/` が、承認済みの受�
   だけを返す読み取り専用スクリプト。ルート解決とドメインマップ読み取りは `src/hooks/lib.ts` の
   `resolveDocPaths` / `readDomainsResult` を import し、写しを持たない。旧版の `codielHandoffCandidate` /
   `codielHarness` / `testRunner` の出力は削除した。
-- intent 文書は `repoRoot`(git ルート)基準、ARCHITECTURE / GOTCHAS は契約 §3 の `docRoot` 基準。
+- intent 文書は `repoRoot`(git ルート)基準、ARCHITECTURE は契約 §3 の `docRoot` 基準。
   2 つが別ディレクトリを指すのは正常な状態。
 - metatron との 2 者比較テストは `src/__test__/check-intent-env.test.ts` の `expectTwoWayMatch`
   (詳細は `mem:file_contract`)。
@@ -243,5 +244,5 @@ codiel の PreToolUse は**フェイルクローズド**(catch で `ask`)。meta
 
 `CLAUDE.example.md`(CLAUDE.md の `## Codiel` の雛形)と `settings.json` がプラグインルートに、
 `assets/rules/codiel.md`(`.claude/rules/codiel.md` の雛形)が assets に、`scripts/install-harness.sh` が
-`.codiel/` 3 ディレクトリの機械的配置を担う(hand-written、esbuild 出力ではない)。
-ARCHITECTURE / GOTCHAS のテンプレートは**もうここには無い**(metatron へ移設)。
+`.codiel/{runs,reports}` の機械的配置を担う(hand-written、esbuild 出力ではない)。
+ARCHITECTURE のテンプレートは**もうここには無い**(metatron へ移設)。

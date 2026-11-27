@@ -1,6 +1,6 @@
-// プロジェクトの CLAUDE.md へ ARCHITECTURE・GOTCHAS の @メンションを追記する。
+// プロジェクトの CLAUDE.md へ ARCHITECTURE の @メンションを追記する。
 //
-// 両文書は CLAUDE.md の @メンションで毎セッション読み込まれる(SessionStart の hook は本文を注入しない)。
+// ARCHITECTURE は CLAUDE.md の @メンションで毎セッション読み込まれる(SessionStart の hook は本文を注入しない)。
 // 既に書かれている @メンションは足さない。CLAUDE.md の他の行は書き換えない。
 // 判定の対象は docRoot の CLAUDE.md と .claude/CLAUDE.md だけである。
 // 他のファイル経由の import・CLAUDE.local.md・親ディレクトリの CLAUDE.md は見ない。
@@ -52,7 +52,8 @@ function mentions(text: string): Set<string> {
   const found = new Set<string>()
   const withoutComments = text
     .replace(/^\uFEFF/, "")
-    .replace(/<!--[\s\S]*?-->/g, " ")
+    // インラインコードの中の `<!--` は始まりにならないので、コードの範囲はそのまま残す。
+    .replace(/`[^`\n]*`|<!--[\s\S]*?-->/g, (m) => (m[0] === "`" ? m : " "))
   let fence: { char: string; length: number } | null = null
   for (const line of withoutComments.split(/\r?\n/)) {
     // 箇条書きの中のフェンスは 4 文字以上下がるので、字下げの深さは問わない。
@@ -61,7 +62,13 @@ function mentions(text: string): Set<string> {
       const char = marker[1][0]
       const length = marker[1].length
       if (fence === null) fence = { char, length }
-      else if (char === fence.char && length >= fence.length) fence = null
+      // 閉じのフェンスは info string を持たない(CommonMark)。
+      else if (
+        char === fence.char &&
+        length >= fence.length &&
+        line.trim() === marker[1]
+      )
+        fence = null
       continue
     }
     if (fence !== null) continue

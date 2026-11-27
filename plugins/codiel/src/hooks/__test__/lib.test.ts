@@ -76,7 +76,6 @@ function expectSameResolution(startDir: string, label: string): void {
   expect(mine.architecture, `${label}: architecture`).toBe(
     theirs.architecturePath
   )
-  expect(mine.gotchas, `${label}: gotchas`).toBe(theirs.gotchasPath)
   // 既定値へ落とした理由も揃える。文言の完全一致は求めず(2 実装の同期コストが上がる)、
   // 警告が出るか出ないかと件数を見る(契約 §3 規則 3)。
   expect(mine.warnings.length > 0, `${label}: 警告の有無`).toBe(
@@ -162,7 +161,7 @@ test("R3: 設定ファイルでパスを変えた ARCHITECTURE を読む", () =>
   const root = mkTmp("lib-domains-config-")
   writeConfig(root, {
     version: 1,
-    paths: { architecture: "arch/MAIN.md", gotchas: "arch/GOTCHAS.md" }
+    paths: { architecture: "arch/MAIN.md" }
   })
   // 既定パスにはダミーを置き、設定側が優先されることを確かめる
   writeFile(
@@ -684,26 +683,40 @@ test("R10: paths が絶対パスなら既定値に落ち、理由を warnings �
   const root = mkTmp("lib-warn-abs-")
   writeConfig(root, {
     version: 1,
-    paths: { architecture: "/etc/ARCHITECTURE.md", gotchas: "C:/GOTCHAS.md" }
+    paths: { architecture: "/etc/ARCHITECTURE.md" }
   })
   const resolved = resolveDocPaths(root)
   expect(resolved.architecture).toBe(path.join(root, "docs", "ARCHITECTURE.md"))
-  expect(resolved.gotchas).toBe(path.join(root, "docs", "GOTCHAS.md"))
-  expect(resolved.warnings.length).toBe(2)
+  expect(resolved.warnings.length).toBe(1)
   expect(resolved.warnings.join("\n")).toContain("paths.architecture")
-  expect(resolved.warnings.join("\n")).toContain("paths.gotchas")
+})
+
+test("R10: ドライブレターと UNC の絶対パスも既定値に落ち、理由を warnings で返す", () => {
+  for (const architecture of [
+    "C:/ARCHITECTURE.md",
+    "C:\\ARCHITECTURE.md",
+    "//server/share/ARCHITECTURE.md",
+    "\\\\server\\share\\ARCHITECTURE.md"
+  ]) {
+    const root = mkTmp("lib-warn-win-")
+    writeConfig(root, { version: 1, paths: { architecture } })
+    const resolved = resolveDocPaths(root)
+    expect(resolved.architecture, architecture).toBe(
+      path.join(root, "docs", "ARCHITECTURE.md")
+    )
+    expect(resolved.warnings.length, architecture).toBe(1)
+  }
 })
 
 test("R10: paths がルート脱出なら既定値に落ち、理由を warnings で返す", () => {
   const root = mkTmp("lib-warn-escape-")
   writeConfig(root, {
     version: 1,
-    paths: { architecture: "../outside/ARCHITECTURE.md", gotchas: ".." }
+    paths: { architecture: "../outside/ARCHITECTURE.md" }
   })
   const resolved = resolveDocPaths(root)
   expect(resolved.architecture).toBe(path.join(root, "docs", "ARCHITECTURE.md"))
-  expect(resolved.gotchas).toBe(path.join(root, "docs", "GOTCHAS.md"))
-  expect(resolved.warnings.length).toBe(2)
+  expect(resolved.warnings.length).toBe(1)
 })
 
 test("R10: 壊れた JSON なら全項目が既定値になり、理由を warnings で返す", () => {
@@ -711,7 +724,6 @@ test("R10: 壊れた JSON なら全項目が既定値になり、理由を warni
   writeFile(path.join(root, "metatron.config.json"), "{ not json")
   const resolved = resolveDocPaths(root)
   expect(resolved.architecture).toBe(path.join(root, "docs", "ARCHITECTURE.md"))
-  expect(resolved.gotchas).toBe(path.join(root, "docs", "GOTCHAS.md"))
   expect(resolved.warnings.length).toBe(1)
 
   // トップレベルがオブジェクトでない場合も「壊れた JSON」に含める(契約 §2)。
@@ -730,11 +742,22 @@ test("R10: 未知の version なら全項目が既定値になり、理由を wa
 
 test("R10: paths の型不整合はその項目だけ既定値に落とし、理由を返す", () => {
   const root = mkTmp("lib-warn-typed-")
-  writeConfig(root, { version: 1, paths: { architecture: 42, gotchas: "" } })
+  writeConfig(root, { version: 1, paths: { architecture: 42 } })
   const resolved = resolveDocPaths(root)
   expect(resolved.architecture).toBe(path.join(root, "docs", "ARCHITECTURE.md"))
-  expect(resolved.gotchas).toBe(path.join(root, "docs", "GOTCHAS.md"))
-  expect(resolved.warnings.length).toBe(2)
+  expect(resolved.warnings.length).toBe(1)
+})
+
+test("R10: paths.gotchas は警告も解決への影響も無く無視される(metatron と一致)", () => {
+  const root = mkTmp("lib-warn-gotchas-")
+  writeConfig(root, {
+    version: 1,
+    paths: { architecture: "arch/MAIN.md", gotchas: "arch/TRAPS.md" }
+  })
+  const resolved = resolveDocPaths(root)
+  expect(resolved.architecture).toBe(path.join(root, "arch", "MAIN.md"))
+  expect(resolved.warnings.length).toBe(0)
+  expectSameResolution(root, "paths.gotchas の無視")
 })
 
 test("R10: 設定ファイルが無いことは警告にしない(正常な状態)", () => {
@@ -812,7 +835,7 @@ test("R4: paths が絶対パス / ルート脱出のとき既定値に落ちて�
   const abs = mkTmp("lib-cmp-abs-")
   writeConfig(abs, {
     version: 1,
-    paths: { architecture: "/etc/ARCHITECTURE.md", gotchas: "C:/GOTCHAS.md" }
+    paths: { architecture: "/etc/ARCHITECTURE.md" }
   })
   expectSameResolution(abs, "絶対パス")
   expect(resolveDocPaths(abs).architecture).toBe(
@@ -822,12 +845,20 @@ test("R4: paths が絶対パス / ルート脱出のとき既定値に落ちて�
   const esc = mkTmp("lib-cmp-escape-")
   writeConfig(esc, {
     version: 1,
-    paths: { architecture: "../outside/ARCHITECTURE.md", gotchas: ".." }
+    paths: { architecture: "../outside/ARCHITECTURE.md" }
   })
   expectSameResolution(esc, "ルート脱出")
-  expect(resolveDocPaths(esc).gotchas).toBe(
-    path.join(esc, "docs", "GOTCHAS.md")
-  )
+
+  for (const architecture of [
+    "C:/ARCHITECTURE.md",
+    "C:\\ARCHITECTURE.md",
+    "//server/share/ARCHITECTURE.md",
+    "\\\\server\\share\\ARCHITECTURE.md"
+  ]) {
+    const win = mkTmp("lib-cmp-win-")
+    writeConfig(win, { version: 1, paths: { architecture } })
+    expectSameResolution(win, `Windows の絶対パス ${architecture}`)
+  }
 })
 
 test("R4: 壊れた設定・未知の version・型不整合で一致する", () => {
@@ -847,7 +878,7 @@ test("R4: 壊れた設定・未知の version・型不整合で一致する", ()
   expectSameResolution(unknown, "未知の version")
 
   const typed = mkTmp("lib-cmp-typed-")
-  writeConfig(typed, { version: 1, paths: { architecture: 42, gotchas: "" } })
+  writeConfig(typed, { version: 1, paths: { architecture: 42 } })
   expectSameResolution(typed, "paths の型不整合")
 })
 
@@ -855,9 +886,16 @@ test("R4: Windows 形式の区切りを含む paths で一致する", () => {
   const root = mkTmp("lib-cmp-winsep-")
   writeConfig(root, {
     version: 1,
-    paths: { architecture: "docs\\arch\\MAIN.md", gotchas: "..\\outside.md" }
+    paths: { architecture: "..\\outside.md" }
   })
-  expectSameResolution(root, "Windows 形式の区切り")
+  expectSameResolution(root, "Windows 形式の区切り(ルート脱出)")
+
+  const ok = mkTmp("lib-cmp-winsep-ok-")
+  writeConfig(ok, {
+    version: 1,
+    paths: { architecture: "docs\\arch\\MAIN.md" }
+  })
+  expectSameResolution(ok, "Windows 形式の区切り")
 })
 
 test("R4: シンボリックリンク経由の開始ディレクトリで一致する", () => {
@@ -1003,4 +1041,89 @@ test("R4: 親の設定ファイルを git の境界を越えて拾わず、metat
   const sub = mkSub(inner, "sub")
   expectSameResolution(sub, "親の中の worktree")
   expect(resolveDocPaths(sub).docRoot).toBe(inner)
+})
+
+// git を実行できない環境を作る。PATH を空にすると spawnSync("git") が失敗する。
+function withoutGit<T>(fn: () => T): T {
+  const saved = process.env.PATH
+  process.env.PATH = ""
+  try {
+    return fn()
+  } finally {
+    process.env.PATH = saved
+  }
+}
+
+// 呼ばれたら印を残して失敗する偽の git を PATH の先頭に置き、git が呼ばれたかを返す。
+function gitCalledDuring(fn: () => void): boolean {
+  const bin = fs.mkdtempSync(path.join(os.tmpdir(), "fake-git-"))
+  const marker = path.join(bin, "called")
+  fs.writeFileSync(
+    path.join(bin, "git"),
+    `#!/bin/sh\necho called > "${marker}"\nexit 128\n`,
+    { mode: 0o755 }
+  )
+  const saved = process.env.PATH
+  process.env.PATH = bin
+  try {
+    fn()
+    return fs.existsSync(marker)
+  } finally {
+    process.env.PATH = saved
+    fs.rmSync(bin, { recursive: true, force: true })
+  }
+}
+
+test("R1-g0: 開始ディレクトリに設定があれば、codiel も git を呼ばない", () => {
+  const own = mkTmp("lib-fakegit-")
+  const pkg = path.join(own, "pkg")
+  fs.mkdirSync(pkg, { recursive: true })
+  writeConfig(pkg, { version: 1 })
+  expect(gitCalledDuring(() => findDocRoot(pkg))).toBe(false)
+  const other = path.join(own, "other")
+  fs.mkdirSync(other, { recursive: true })
+  expect(gitCalledDuring(() => findDocRoot(other))).toBe(true)
+})
+
+test("R1-g1: git を実行できないときの .git ディレクトリの境界が metatron と一致する", () => {
+  expect(withoutGit(() => spawnSync("git", ["--version"])).error).toBeDefined()
+  const outer = mkTmp("lib-nogit-repo-")
+  writeConfig(outer, { version: 1 })
+  const repo = path.join(outer, "repo")
+  const start = path.join(repo, "src")
+  fs.mkdirSync(start, { recursive: true })
+  execFileSync("git", ["init", "-q"], { cwd: repo, stdio: "ignore" })
+  withoutGit(() => expectSameResolution(start, ".git ディレクトリの境界"))
+  expect(withoutGit(() => findDocRoot(start))).toBe(fs.realpathSync(start))
+})
+
+test("R1-g: git を実行できないときの探索の境界が metatron と一致する", () => {
+  // 開始ディレクトリに設定がある
+  const own = mkTmp("lib-nogit-own-")
+  const pkg = path.join(own, "pkg")
+  fs.mkdirSync(pkg, { recursive: true })
+  writeConfig(pkg, { version: 1 })
+  withoutGit(() => expectSameResolution(pkg, "開始ディレクトリの設定"))
+  expect(withoutGit(() => findDocRoot(pkg))).toBe(fs.realpathSync(pkg))
+
+  // .git(ファイル)を持つ worktree の外側に設定がある
+  const outer = mkTmp("lib-nogit-wt-")
+  writeConfig(outer, { version: 1 })
+  const wt = path.join(outer, "worktrees", "wt")
+  const start = path.join(wt, "src")
+  fs.mkdirSync(start, { recursive: true })
+  fs.writeFileSync(path.join(wt, ".git"), "gitdir: /nonexistent\n")
+  withoutGit(() => expectSameResolution(start, ".git の境界"))
+  expect(withoutGit(() => findDocRoot(start))).toBe(fs.realpathSync(start))
+})
+
+test("R4-h: git 管理外のワークスペースの直下の設定ファイルは、その中のリポジトリから拾わない(metatron と一致)", () => {
+  const ws = mkTmp("lib-ws-")
+  writeConfig(ws, { version: 1 })
+  const repo = path.join(ws, "repo")
+  const sub = path.join(repo, "sub")
+  fs.mkdirSync(sub, { recursive: true })
+  execFileSync("git", ["init", "-q"], { cwd: repo, stdio: "ignore" })
+  expectSameResolution(sub, "ワークスペースの直下の設定")
+  expect(findDocRoot(sub)).toBe(fs.realpathSync(repo))
 })

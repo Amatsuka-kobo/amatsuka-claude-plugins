@@ -21,7 +21,7 @@ import fs from "node:fs"
 export const ARCHITECTURE_TITLE = "# ARCHITECTURE"
 
 /**
- * 契約 §4-1 の 9 セクション。見出し名と順序を固定する。
+ * 契約 §4-1 の 8 セクション。見出し名と順序を固定する。
  *
  * `保護パス` / `テスト方針` は rules から ARCHITECTURE へ戻した。規約は ARCHITECTURE で扱わない。
  * この許可リストは書き込みの検証と、新しいセクションを差し込む位置の決定に使う。
@@ -34,13 +34,11 @@ export const ARCHITECTURE_HEADINGS = [
   "ドメインマップ",
   "コマンド定義",
   "保護パス",
-  "テスト方針",
-  "ADR 一覧"
+  "テスト方針"
 ] as const
 
 export type ArchitectureHeading = (typeof ARCHITECTURE_HEADINGS)[number]
 
-export const ADR_HEADING = "ADR 一覧"
 export const DOMAINS_HEADING = "ドメインマップ"
 
 /** 契約 §1。旧マーカー `codiel:domains` は読まない。 */
@@ -154,8 +152,7 @@ export interface FenceScan {
 /**
  * 契約 §4-2 の状態機械そのもの。行を走査し、フェンスの内側に印を付ける。
  *
- * セクション分解(`parseArchitecture`)と、節の中を `###` で刻む adr.ts が
- * **同一の実装**でフェンスを扱うための唯一の入口である。フェンス判定を各所で
+ * セクション分解(`parseArchitecture`)がフェンスを扱うための唯一の入口である。フェンス判定を各所で
  * 書き直すと、同じ文書に対して分解が食い違う(契約 §1 の「独自のフェンス判定を
  * 書かない」と同じ理由)。
  */
@@ -373,10 +370,7 @@ function canonicalIndex(heading: string): number {
 // 見出しキーの検証(契約 §4-1)
 // ---------------------------------------------------------------------------
 
-export type HeadingKeyError =
-  | "adr_heading"
-  | "retired_overview_key"
-  | "unknown_heading"
+export type HeadingKeyError = "retired_overview_key" | "unknown_heading"
 
 export type HeadingKeyValidation =
   // `allowUnlisted`(削除)のときは許可リストに無い見出しも通るため string とする。
@@ -384,10 +378,8 @@ export type HeadingKeyValidation =
   | { ok: false; error: HeadingKeyError; message: string }
 
 /**
- * `heading` キーの検証。契約 §4-1 の 7 キー以外はエラー。
+ * `heading` キーの検証。契約 §4-1 の 8 キー以外はエラー。
  *
- * - `ADR 一覧` は専用のエラーにし、`stage-adr` へ誘導する。
- *   丸ごと差し替えを許すと採番・状態の値域・状態変更履歴の追記を迂回できるため。
  * - `overview` 疑似キーは廃止済み。
  */
 export function validateHeadingKey(
@@ -402,15 +394,6 @@ export function validateHeadingKey(
     }
   }
   const value = heading.trim()
-  if (value === ADR_HEADING) {
-    return {
-      ok: false,
-      error: "adr_heading",
-      message:
-        "`ADR 一覧` は stage-architecture では変更できません。ADR の追加・状態変更は stage-adr を使ってください。" +
-        "節ごとの差し替えを許すと、採番・`状態` の値域・状態変更履歴の追記をすべて迂回できるためです。"
-    }
-  }
   if (RETIRED_PSEUDO_KEYS.has(value.toLowerCase())) {
     return {
       ok: false,
@@ -712,6 +695,8 @@ interface SpliceOp {
   end: number
   text: string
   order: number
+  /** 文書の最後のセクションを消すか差し替えるか。 */
+  touchesEnd?: boolean
 }
 
 // 契約 §4-1 の順序に従って、新しいセクションを差し込む位置を決める。
@@ -748,12 +733,14 @@ function createArchitecture(changes: SectionChange[], eol: string): string {
  * - 見出し行そのものも書き換えない。差し替えるのは本文だけである。
  * - `current` が `null` または空白のみのときは新規作成として全文を組み立てる。
  * - 未閉フェンスは拒否する(書き込み経路・第 1 層)。
- * - 例外は**節の追加**のみ。新しい節を差し込む境界には区切りの空行が 1 行入る
- *   (末尾へ追加した場合、その空行は直前の節の末尾に付く)。既存の本文の
- *   バイト列は変わらない。
+ * - 例外は 2 つある。
+ *   - **節の追加**。新しい節を差し込む境界には区切りの空行が 1 行入る
+ *     (末尾へ追加した場合、その空行は直前の節の末尾に付く)。既存の本文の
+ *     バイト列は変わらない。
+ *   - **最後のセクションの削除と差し替え**。文書の末尾の空行(空白だけの行を含む)を除き、
+ *     改行を 1 つにそろえる。削除では、新しく最後になったセクションの末尾の空行も消える。
  *
- * `## ADR 一覧` を対象にできるのは adr.ts のためである。CLI の
- * `stage-architecture` は `prepareArchitectureUpdate` を使うこと。
+ * CLI の `stage-architecture` は `prepareArchitectureUpdate` を使うこと。
  */
 export function applySectionChanges(
   current: string | null | undefined,
@@ -810,7 +797,8 @@ export function applySectionChanges(
         start: section.startLine,
         end: section.endLine,
         text: "",
-        order
+        order,
+        touchesEnd: section.endLine === lines.length
       })
       applied.push({ heading: change.heading, mode: "removed" })
       continue
@@ -821,7 +809,8 @@ export function applySectionChanges(
         start: section.startLine + 1,
         end: section.contentEndLine,
         text: body === "" ? "" : `${eol}${body}${eol}`,
-        order
+        order,
+        touchesEnd: section.endLine === lines.length
       })
       applied.push({ heading: change.heading, mode: "replaced" })
       continue
@@ -856,7 +845,14 @@ export function applySectionChanges(
   ops.sort((a, b) => b.start - a.start || b.order - a.order)
   for (const op of ops) chunks.splice(op.start, op.end - op.start, op.text)
 
-  const next = chunks.join("")
+  let next = chunks.join("")
+  // 最後のセクションを消すと、その前のセクションの区切りの空行が文書の末尾に残る。
+  // 最後のセクションを消すか差し替えたときだけ、文書の末尾の改行を 1 つにそろえる。
+  if (ops.some((op) => op.touchesEnd === true)) {
+    // 改行コードは元の文書の末尾のものを保つ(混在する文書で書き換えない)。
+    const endEol = /\r\n$/.test(text) ? "\r\n" : /\n$/.test(text) ? "\n" : eol
+    next = next.replace(/(?:[ \t]*\r?\n)+$/, endEol)
+  }
   return (
     rejectBrokenResult(text, next, warnings) ?? {
       ok: true,
@@ -872,7 +868,7 @@ export function applySectionChanges(
 // 差し込む前の本文だけを見ても分からない。壊れた文書を保存すると、閉じていないフェンスの
 // 後ろは CLI 自身も書き換えられなくなる。
 // ドメインマップは、変更前に読めていた(またはブロックが無かった)ときだけ見る。
-// 変更前から壊れている文書で他のセクションの更新や stage-adr を止めると、直す手段まで塞ぐ。
+// 変更前から壊れている文書で他のセクションの更新を止めると、直す手段まで塞ぐ。
 function rejectBrokenResult(
   before: string,
   text: string,
@@ -899,17 +895,6 @@ function rejectBrokenResult(
     }
   }
   return null
-}
-
-// `## ADR 一覧` のセクションの数と、最初のセクションの原文(末尾の空白を除く)を返す。
-// 無ければ数は 0、原文は空文字列。数も比べるので、原文は最初の 1 つを見れば足りる。
-function adrSectionSnapshot(text: string): { count: number; raw: string } {
-  const doc = parseArchitecture(text)
-  const section = findSection(doc, ADR_HEADING)
-  return {
-    count: doc.sections.filter((s) => s.heading === ADR_HEADING).length,
-    raw: section === undefined ? "" : section.raw.replace(/\s+$/, "")
-  }
 }
 
 /**
@@ -1067,21 +1052,6 @@ export function prepareArchitectureUpdate(
   }
 
   const result = applySectionChanges(current, normalizedChanges)
-  if (result.ok) {
-    // `## ADR 一覧` は stage-architecture の対象にできない。body に見出しや ADR を
-    // 書き込んで、stage-adr の採番と状態の値域を迂回させない。正当な更新で ADR 一覧の
-    // バイト列が変わるのは末尾の空行だけなので、末尾の空白を除いて比べる。
-    const before = adrSectionSnapshot(current ?? "")
-    const after = adrSectionSnapshot(result.text)
-    if (before.count !== after.count || before.raw !== after.raw) {
-      return {
-        ok: false,
-        error: "invalid_body",
-        message: `body から \`## ${ADR_HEADING}\` を変えることはできません。body に \`## ${ADR_HEADING}\` の見出しや ADR を書かず、ADR の追加・状態変更は stage-adr を使ってください。`,
-        warnings: [...warnings, ...result.warnings]
-      }
-    }
-  }
   return { ...result, warnings: [...warnings, ...result.warnings] }
 }
 
