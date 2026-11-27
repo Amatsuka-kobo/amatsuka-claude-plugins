@@ -304,6 +304,15 @@ test("R4-d: ネストした git リポジトリ → 内側のリポジトリル�
   expect(findDocRoot(sub)).toBe(inner)
 })
 
+test("R4-h: git 管理外のワークスペースの直下の設定ファイルは、その中のリポジトリから拾わない", () => {
+  const ws = mkTmp()
+  writeConfig(ws, { version: 1 })
+  const repo = mkSub(ws, "repo")
+  gitInit(repo)
+  const sub = mkSub(repo, "sub")
+  expect(findDocRoot(sub)).toBe(repo)
+})
+
 test("R4-g: 親の設定ファイルは git の境界を越えて拾わない(親の中に置いた worktree)", () => {
   const outer = mkTmp()
   gitInit(outer)
@@ -411,12 +420,11 @@ function gitCalledDuring(fn: () => void): boolean {
   process.env.PATH = bin
   try {
     fn()
+    return fs.existsSync(marker)
   } finally {
     process.env.PATH = saved
+    fs.rmSync(bin, { recursive: true, force: true })
   }
-  const called = fs.existsSync(marker)
-  fs.rmSync(bin, { recursive: true, force: true })
-  return called
 }
 
 test("R1-g0: PATH を空にすると git を起動できない(以降のテストの前提)", () => {

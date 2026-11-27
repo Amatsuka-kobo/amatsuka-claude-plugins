@@ -695,6 +695,8 @@ interface SpliceOp {
   end: number
   text: string
   order: number
+  /** 文書の最後のセクションを消すか差し替えるか。 */
+  touchesEnd?: boolean
 }
 
 // 契約 §4-1 の順序に従って、新しいセクションを差し込む位置を決める。
@@ -792,7 +794,8 @@ export function applySectionChanges(
         start: section.startLine,
         end: section.endLine,
         text: "",
-        order
+        order,
+        touchesEnd: section.endLine === lines.length
       })
       applied.push({ heading: change.heading, mode: "removed" })
       continue
@@ -803,7 +806,8 @@ export function applySectionChanges(
         start: section.startLine + 1,
         end: section.contentEndLine,
         text: body === "" ? "" : `${eol}${body}${eol}`,
-        order
+        order,
+        touchesEnd: section.endLine === lines.length
       })
       applied.push({ heading: change.heading, mode: "replaced" })
       continue
@@ -838,7 +842,12 @@ export function applySectionChanges(
   ops.sort((a, b) => b.start - a.start || b.order - a.order)
   for (const op of ops) chunks.splice(op.start, op.end - op.start, op.text)
 
-  const next = chunks.join("")
+  let next = chunks.join("")
+  // 最後のセクションを消すと、その前のセクションの区切りの空行が文書の末尾に残る。
+  // 最後のセクションを消すか差し替えたときだけ、文書の末尾の改行を 1 つにそろえる。
+  if (ops.some((op) => op.touchesEnd === true)) {
+    next = next.replace(/(?:\r?\n)+$/, eol)
+  }
   return (
     rejectBrokenResult(text, next, warnings) ?? {
       ok: true,

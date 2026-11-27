@@ -83,7 +83,7 @@ export function runLinkClaudeMd(ctx: LinkContext): void {
 }
 
 // 作れたら true、既にあれば false を返す。作った後の書き込みに失敗したら、作ったファイルを消して投げる。
-function createConfigIfMissing(configPath: string): boolean {
+export function createConfigIfMissing(configPath: string): boolean {
   let fd: number
   try {
     fd = fs.openSync(configPath, "wx")
@@ -92,7 +92,7 @@ function createConfigIfMissing(configPath: string): boolean {
     throw error
   }
   try {
-    fs.writeSync(fd, '{\n  "version": 1\n}\n')
+    fs.writeFileSync(fd, '{\n  "version": 1\n}\n')
   } catch (error) {
     fs.closeSync(fd)
     fs.rmSync(configPath, { force: true })
