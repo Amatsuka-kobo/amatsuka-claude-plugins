@@ -18,10 +18,12 @@ CLI の絶対パスは SessionStart の案内文、`get config` の出力の `cl
 | `stage-architecture --input <path>` | 段階 | diff と `stagingId` と書き込み後の行数(`lineCount`・`lineLimit`)。書き込みはしない。行数が `lineLimit` を超えると `warnings` に 1 行が加わる |
 | `commit-architecture --staging-id <id>` | 書 | `stagingId` を消費して ARCHITECTURE へ書き込む |
 | `link-claude-md` | 書 | 承認後に CLAUDE.md へ ARCHITECTURE の @メンションを追記し、`metatron.config.json` が無ければ作る。追記したもの(`added`)・既にあったもの(`present`)・飛ばしたもの(`skipped`)・設定ファイルを作ったか(`configCreated`)を返す |
+| `check` | 検査 | ARCHITECTURE の `metatron:checks` の定義を実行し、違反(`violations`)を返す。終了コードで結果を返す |
 
 ## 入出力の規約
 
 - 出力は常に JSON を stdout へ返す。人間向けの補足と警告は stderr へ出る。判断は stdout の JSON だけで行う。
+- `check` は検査の層で、違反なしで exit 0、違反ありで 1、定義や走査の問題で 2、内部エラーで 3 を返す。書式と判定は `check-format.md` に従う。
 - 読み取り系は常に exit 0 で終わる。読めなかったことも `ok: false` と `error` を持つ JSON で返るため、exit code で読み取りの成否を判定しない。
 - 読み取り系の `error: "not_created"` は「文書が未作成」という事実であって異常ではない。
 - 書き込み系は成功で exit 0、拒否・失敗で非 0 で終わる。理由は JSON の `error` に入る。
@@ -50,7 +52,7 @@ CLI の絶対パスは SessionStart の案内文、`get config` の出力の `cl
 - `heading` は ARCHITECTURE の見出しキーのいずれか。一覧は `get config` の `inputSchemas["stage-architecture"].headings` から取る。未知の見出しは拒否される。
 - 許可リストに無い見出し(残った旧見出しと `## ADR 一覧` を含む)は、本文の差し替えが `unknown_heading` で拒否される。削除だけを受け付ける。旧見出しのときは、`message` に本文の移し先が載る。
 - `body` は見出し行を含まない本文。同じ `heading` を 2 回書くと拒否される。
-- 差し替えた後の全文に閉じていないフェンスがあれば `unclosed_fence`、読めない `metatron:domains` ブロックがあれば `invalid_domains`(変更前から読めない文書では拒否しない)で拒否される。
+- 差し替えた後の全文に閉じていないフェンスがあれば `unclosed_fence`、読めない `metatron:domains` ブロックがあれば `invalid_domains`、読めない `metatron:checks` ブロックがあれば `invalid_checks`(どちらも変更前から読めない文書では拒否しない)で拒否される。
 - `reason` は任意。
 - 最後のセクションを削除または差し替えると、文書の末尾の空行を除き、改行を 1 つにそろえる。削除では、新しく最後になるセクションの末尾の空行も消える。それ以外の変更では、指定していないセクションのバイト列は変わらない。
 

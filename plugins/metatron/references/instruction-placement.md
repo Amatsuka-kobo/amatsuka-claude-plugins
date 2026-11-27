@@ -29,5 +29,5 @@
 | 決まりの形 | 強制の手段 |
 | --- | --- |
 | 特定のツールの呼び出しやパスへの書き込みを止める | hook、または permissions の deny |
-| 構造の決まり(import の方向など) | lint などの検査 |
+| 構造の決まり(import の方向など) | lint などの検査。ECMAScript の import の方向なら ARCHITECTURE の検査の定義(`check-format.md`) |
 | 完了の前に必ず行う検査 | Stop hook など |
