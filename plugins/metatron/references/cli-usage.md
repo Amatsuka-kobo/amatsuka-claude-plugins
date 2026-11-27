@@ -72,7 +72,7 @@ CLI の絶対パスは SessionStart の案内文、`get config` の出力の `cl
 - コードフェンス・インラインコード・HTML コメントの外に既に書かれている @メンションは足さない。行の途中・箇条書きの中・`./` 付きの書き方も、書かれているものとして数える。既存の行は書き換えない。
 - 判定の対象は docRoot の `CLAUDE.md` と `.claude/CLAUDE.md` だけである。他のファイル経由の import・`CLAUDE.local.md`・親ディレクトリの CLAUDE.md は見ない。
 - 追記する改行コードは、既存のファイルに合わせる。
-- `metatron.config.json` が無いときは、CLAUDE.md より先に `{ "version": 1 }` で作る。既存の設定は上書きしない。codiel はこのファイルの有無で metatron の利用を判定する。
+- `metatron.config.json` が無いときは、CLAUDE.md より先に `{ "version": 1 }` で作る。既存の設定は上書きしない。CLAUDE.md の書き込みに失敗したときは、その実行で作った設定ファイルを消す。消せなかったときは、エラーの JSON の `configRemoveFailed` が `true` になる。codiel はこのファイルの有無で metatron の利用を判定する。
 - ARCHITECTURE が無いときは `architecture_missing` で拒否される。
 - 空白か制御文字を含むパスは @メンションにできないので、追記せずに `skipped` に載せる。残りのパスは追記する。
 - **実行の前にユーザーの承認を得る。** 追記する行と、作られる設定ファイルのパスを示してから実行する。
