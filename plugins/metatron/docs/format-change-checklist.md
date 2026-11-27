@@ -6,12 +6,14 @@ metatron が定める書式と規則を変更したときに、同じコミッ�
 ## ARCHITECTURE の書式(`references/architecture-format.md`)
 
 - [ ] 見出し許可リストは `src/lib/architecture.ts` の `ARCHITECTURE_HEADINGS` と `src/lib/scan.ts` の `ARCHITECTURE_SECTIONS` の 2 箇所にある。同じコミットで直す
+- [ ] 旧見出しと移し先の対応表は `src/lib/architecture.ts` の `LEGACY_HEADINGS` と `src/lib/scan.ts` の `LEGACY_SECTIONS` の 2 箇所にある。同じコミットで直す
 - [ ] セクションを追加・削除したら、`docs/ARCHITECTURE.example.md` に記入例と記入ガイドを置き、`skills/capturing-architecture/SKILL.md` の起草の単位を揃える
 - [ ] 契約凍結文書 `harness-docs/design/2026-08-16-file-contract-freeze.md` の §4
 - [ ] codiel: `src/hooks/lib.ts` の `readDomains`、`initializing-harness` / `orchestrating-runs`、`src/check-intent-env.ts`、`references/handoff-contract.md`
 - [ ] `plugins/metatron/src/lib/architecture.ts` の全文の読み直し(`rejectBrokenResult`)と、`references/cli-usage.md` の `stage-architecture` のエラーコード
 - [ ] `## 技術スタック` と `## コマンド定義` の規定を変えたら、`src/lib/scan.ts` の `SOURCE_FILE_RES`(`diff-architecture` の `sources`)、`src/lib/__test__/scan.test.ts` の sources のテスト、`skills/updating-architecture/SKILL.md` の手順 2 の sources の読み方、`skills/capturing-architecture/SKILL.md` の起草の材料、`docs/ARCHITECTURE.example.md` を揃える
-- [ ] 書式や執筆規律を変えたら、利用者の既存の文書は `/metatron:audit` で追随させる。README の `/metatron:audit` の説明が変更後の規定と食い違わないかを確かめる
+- [ ] 書式や執筆規律を変えたら、利用者の既存の文書を追随させる。見出しの変更は `/metatron:update` の旧構成の移行で、書き方の変更は `/metatron:audit` で追随させる。見出しを廃止したら `LEGACY_HEADINGS` と `LEGACY_SECTIONS` に旧見出しを足し、`skills/updating-architecture/SKILL.md` の旧構成の移行と README の `/metatron:update` と `/metatron:audit` の説明が変更後の規定と食い違わないかを確かめる
+- [ ] ARCHITECTURE と CLAUDE.md の境界(`references/document-boundary.md`)を変えたら、`skills/capturing-architecture/SKILL.md` と `skills/updating-architecture/SKILL.md` の参照と起草の規律を揃える
 
 ## metatron.config.json のスキーマとパス解決規則(`references/config-schema.md`)
 
