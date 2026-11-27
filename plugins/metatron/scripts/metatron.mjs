@@ -2573,18 +2573,10 @@ function runLinkClaudeMd(ctx) {
   const relatives = candidates.filter(isMentionablePath);
   const skipped = candidates.filter((rel) => !isMentionablePath(rel));
   let configCreated = false;
+  let result;
   try {
     configCreated = createConfigIfMissing(config.configPath);
-    const result = linkClaudeMd(config.docRoot, relatives);
-    emitResult(command, {
-      ok: true,
-      written: result.added.length > 0 || configCreated,
-      ...result,
-      skipped,
-      configPath: config.configPath,
-      configCreated,
-      warnings: config.warnings
-    });
+    result = linkClaudeMd(config.docRoot, relatives);
   } catch (error) {
     let configRemoveError;
     if (configCreated) {
@@ -2603,16 +2595,35 @@ function runLinkClaudeMd(ctx) {
         configRemoveError: `\u4F5C\u3063\u305F\u8A2D\u5B9A\u30D5\u30A1\u30A4\u30EB ${config.configPath} \u3092\u6D88\u305B\u307E\u305B\u3093\u3067\u3057\u305F: ${configRemoveError}`
       }
     });
+    return;
   }
+  emitResult(command, {
+    ok: true,
+    written: result.added.length > 0 || configCreated,
+    ...result,
+    skipped,
+    configPath: config.configPath,
+    configCreated,
+    warnings: config.warnings
+  });
 }
 function createConfigIfMissing(configPath) {
+  let fd;
   try {
-    fs7.writeFileSync(configPath, '{\n  "version": 1\n}\n', { flag: "wx" });
-    return true;
+    fd = fs7.openSync(configPath, "wx");
   } catch (error) {
     if (error.code === "EEXIST") return false;
     throw error;
   }
+  try {
+    fs7.writeSync(fd, '{\n  "version": 1\n}\n');
+  } catch (error) {
+    fs7.closeSync(fd);
+    fs7.rmSync(configPath, { force: true });
+    throw error;
+  }
+  fs7.closeSync(fd);
+  return true;
 }
 
 // src/lib/file-lock.ts

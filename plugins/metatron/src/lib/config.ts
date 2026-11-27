@@ -91,7 +91,8 @@ function gitToplevel(cwd: string): string | null {
 /**
  * 契約 §3 規則 1: ルート解決。
  *
- * 1. `metatron.config.json` を持つ最も近い祖先ディレクトリ(開始ディレクトリ自身を含む)
+ * 1. `metatron.config.json` を持つ最も近い祖先ディレクトリ(開始ディレクトリ自身を含み、git の
+ *    toplevel より上は見ない)
  * 2. 無ければ `git rev-parse --show-toplevel`
  * 3. それも無ければ開始ディレクトリ
  *

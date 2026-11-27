@@ -46,7 +46,7 @@
 
 開始ディレクトリから上方向に探索し、最初に見つかったものを `docRoot` とする。
 
-1. `metatron.config.json` を持つ最も近い祖先ディレクトリ
+1. `metatron.config.json` を持つ最も近い祖先ディレクトリ(git の toplevel まで。toplevel より上は見ない)
 2. 無ければ `git rev-parse --show-toplevel` の出力
 3. それも無ければ開始ディレクトリ
 
