@@ -208,7 +208,7 @@ composes every `ROLES` id in en and checks for Japanese characters and punctuati
 existing `_common.md` headings; `vocabulary.ts` matches them verbatim.
 
 **Delegation-request examples (0.19.6-dev).** An explanatory example from a requester was copied
-verbatim into a document in three consecutive attempts; `harness-docs/GOTCHAS.md` records the
+verbatim into a document in three consecutive attempts; `docs/old/metatron/GOTCHAS.md` (the retired ledger) records the
 failure as `GOTCHA-002`. The rule reverses the default: requesters mark an example only when it is
 to appear in the produced document, with `本文に載せる`; every unmarked example is explanatory
 request context. Three sender rules were added to §文書作成を委譲するとき (renamed §文書の執筆を委譲するとき in 0.20
