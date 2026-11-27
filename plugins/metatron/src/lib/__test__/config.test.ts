@@ -124,6 +124,24 @@ test("C5: 絶対パス指定 → 拒否され既定値、理由を返す", () =>
   expect(cfg.warnings[0]).toContain("絶対パス")
 })
 
+test("C5b: ドライブレターと UNC の絶対パスも拒否され既定値、理由を返す", () => {
+  for (const architecture of [
+    "C:/ARCHITECTURE.md",
+    "C:\\ARCHITECTURE.md",
+    "//server/share/ARCHITECTURE.md",
+    "\\\\server\\share\\ARCHITECTURE.md"
+  ]) {
+    const dir = mkTmp()
+    writeConfig(dir, { version: 1, paths: { architecture } })
+    const cfg = loadConfig(dir)
+    expect(cfg.architectureRelative, architecture).toBe(
+      DEFAULT_ARCHITECTURE_PATH
+    )
+    expect(cfg.warnings, architecture).toHaveLength(1)
+    expect(cfg.warnings[0], architecture).toContain("絶対パス")
+  }
+})
+
 test("C6: ../ でルート外を指す → 拒否され既定値、理由を返す", () => {
   const dir = mkTmp()
   writeConfig(dir, {

@@ -73,7 +73,7 @@ function hasContent(filePath: string): boolean {
   }
 }
 
-// 呼び出し規約は契約 §11。
+// 呼び出し規約は契約 §12。
 function cliLines(cli: string): string[] {
   return [
     `全文取得は次の CLI を使う(絶対パス。M = ${cli}):`,

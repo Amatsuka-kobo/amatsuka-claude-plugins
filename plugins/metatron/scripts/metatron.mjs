@@ -2259,11 +2259,7 @@ function commitStaging(input) {
 }
 
 // src/cli/args.ts
-var BOOLEAN_FLAGS = /* @__PURE__ */ new Set([
-  "exclude-tagged",
-  "promotion-candidates",
-  "help"
-]);
+var BOOLEAN_FLAGS = /* @__PURE__ */ new Set(["help"]);
 function parseArgs(argv) {
   const positionals = [];
   const flags = {};
@@ -2707,20 +2703,6 @@ function runCommit(ctx, spec) {
     });
     return;
   }
-  if (!spec.acceptedKinds.includes(found.record.kind)) {
-    emitWriteFailure(
-      command,
-      "staging_kind_mismatch",
-      `\u3053\u306E stagingId \u306F kind: "${found.record.kind}" \u3067\u3059\u3002${command} \u304C\u53D7\u3051\u308B\u306E\u306F ${spec.acceptedKinds.map((kind) => `"${kind}"`).join(" / ")} \u3067\u3059\u3002${spec.stageHint}`,
-      {
-        written: false,
-        stagingId: stagingId.trim(),
-        kind: found.record.kind,
-        acceptedKinds: [...spec.acceptedKinds]
-      }
-    );
-    return;
-  }
   const targetPath = found.record.targetPath;
   let result;
   try {
@@ -2770,7 +2752,6 @@ function runCommit(ctx, spec) {
 function runCommitArchitecture(ctx) {
   runCommit(ctx, {
     command: "commit-architecture",
-    acceptedKinds: ["architecture"],
     stageHint: "stage-architecture \u304C\u8FD4\u3057\u305F stagingId \u3092\u6E21\u3057\u3066\u304F\u3060\u3055\u3044\u3002"
   });
 }

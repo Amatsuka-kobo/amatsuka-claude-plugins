@@ -92,7 +92,7 @@ staging の種別から `adr`・`gotchas` を消す。変更前に作られた s
 
 ## 注入文と hook
 
-- SessionStart の注入文は、`get architecture` と、ARCHITECTURE の更新に `updating-architecture` を使うという案内だけを出す。消すのは、記録を促す文(`recordingLines`)と、GOTCHAS・ADR の CLI の案内である。hook は SessionStart だけが登録されている。
+- SessionStart の注入文は、`get architecture` と、ARCHITECTURE の更新に `updating-architecture` を使うという案内だけを出す。消すのは、記録を促す文(`recordingLines`)と、GOTCHAS・ADR の CLI の案内である。SubagentStart の hook は登録しない(登録するのは SessionStart と PreToolUse だけ)。
 - `guard-docs` が拒否するのは ARCHITECTURE への書き込みだけになる。GOTCHAS のパスは保護しない。
 
 ## 影響範囲

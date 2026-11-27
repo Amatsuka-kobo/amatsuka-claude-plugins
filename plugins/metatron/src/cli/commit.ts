@@ -1,9 +1,9 @@
-// `commit-architecture --staging-id <id>`(契約 §11、設計書 §7-3・§7-4)。
+// `commit-architecture --staging-id <id>`(契約 §12、設計書 §7-3・§7-4)。
 //
-// stage-architecture の staging を消費して書き込む。種別の違う staging は
-// `staging_kind_mismatch` で拒否し、**staging を消費しない**。
+// stage-architecture の staging を消費して書き込む。staging の種別は `architecture`
+// だけで、廃止した種別の記録は readStaging が読めないものとして拒否する。
 //
-// 書き込みは対象ファイルの `.lock` の下で行う(契約 §11 のロック表)。
+// 書き込みは対象ファイルの `.lock` の下で行う(契約 §12「書き込みの排他」)。
 // stagingId 無しでは失敗する。「差分を見せずにいきなり書く」経路をコマンド体系から
 // 無くすことが、この 2 段階の目的である。
 
@@ -12,8 +12,7 @@ import { FileLockError, withFileLock } from "../lib/file-lock.js"
 import {
   type CommitStagingResult,
   commitStaging,
-  readStaging,
-  type StagingKind
+  readStaging
 } from "../lib/staging.js"
 import { stringFlag } from "./args.js"
 import {
@@ -31,8 +30,7 @@ export interface CommitContext {
 
 interface CommitSpec {
   command: "commit-architecture"
-  acceptedKinds: readonly StagingKind[]
-  /** missing_staging_id と staging_kind_mismatch のメッセージに載せる案内。 */
+  /** missing_staging_id のメッセージに載せる案内。 */
   stageHint: string
 }
 
@@ -58,23 +56,6 @@ function runCommit(ctx: CommitContext, spec: CommitSpec): void {
       written: false,
       stagingId: stagingId.trim()
     })
-    return
-  }
-
-  // kind の照合は staging を消費する前に行う。取り違えた staging は
-  // 消費されないまま残り、正しいコマンドで改めて commit できる。
-  if (!spec.acceptedKinds.includes(found.record.kind)) {
-    emitWriteFailure(
-      command,
-      "staging_kind_mismatch",
-      `この stagingId は kind: "${found.record.kind}" です。${command} が受けるのは ${spec.acceptedKinds.map((kind) => `"${kind}"`).join(" / ")} です。${spec.stageHint}`,
-      {
-        written: false,
-        stagingId: stagingId.trim(),
-        kind: found.record.kind,
-        acceptedKinds: [...spec.acceptedKinds]
-      }
-    )
     return
   }
 
@@ -129,7 +110,6 @@ function runCommit(ctx: CommitContext, spec: CommitSpec): void {
 export function runCommitArchitecture(ctx: CommitContext): void {
   runCommit(ctx, {
     command: "commit-architecture",
-    acceptedKinds: ["architecture"],
     stageHint: "stage-architecture が返した stagingId を渡してください。"
   })
 }

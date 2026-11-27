@@ -720,7 +720,7 @@ node <metatron-plugin-root>/scripts/metatron.mjs <subcommand> [options]
 1. **diff を計算せずに書き込むことはできない。** `commit-architecture` / `commit-rules` は `stagingId` 無しでは失敗する。
 2. **staging は単回使用かつ有効期限つき**(既定 30 分)。
 3. **stage 後に対象ファイルが変化していたら commit は失敗する**(ハッシュ照合、`file_changed`)。
-4. `commit-architecture` は `architecture` の staging だけを受ける。不一致は `staging_kind_mismatch` で拒否する。
+4. staging の種別は `architecture` だけである。廃止した種別(`adr`・`gotchas`)の記録は読めないものとして扱い、`commit-architecture` は `unknown_id` で拒否する。
 
 保存先は `<tmpdir>/metatron-staging/<プロジェクトパスのハッシュ>/<id>.json`。
 プロジェクト内には置かない。
@@ -747,7 +747,7 @@ node <metatron-plugin-root>/scripts/metatron.mjs <subcommand> [options]
 1. 設計書 §7-4 が `wx` による排他・50ms × 20 回・mtime 60 秒を明示的に決定しており、
    機構の追加は契約ではなく設計の変更にあたる。
 2. この窓に入るには「正当な保持者が 60 秒を超えてロックを保持し、かつ奪取側の
-   再確認と `unlink` の間の数ミリ秒で取り直す」ことが要る。GOTCHAS / ARCHITECTURE への
+   再確認と `unlink` の間の数ミリ秒で取り直す」ことが要る。ARCHITECTURE への
    書き込みは初回生成と時々の記録・更新だけであり、この同時性は実運用で起こらない。
 
 フェンシングが要ると判断する材料が出たら、そのときに設計書へ差し戻して決める。
@@ -815,7 +815,7 @@ process.exit(0)
 
 **SessionStart 注入の「何も出力しない」の限定(metatron 設計書 §8-7)。**
 「何も出力しない」は「**文書の内容を**出力しない」の意味に限定する。
-**ARCHITECTURE も GOTCHAS も無い(読めない場合を含む)ときも、CLI 案内だけは注入する。**
+**ARCHITECTURE が無い(読めない場合を含む)ときも、CLI 案内だけは注入する。**
 `/metatron:init` はまさにその状態で使うコマンドであり、案内を落とすと AI は CLI の
 絶対パスを知る手段を持たず、init を開始できない。これは「CLI の発見性はモデル
 コンテキストで担保する」という本契約の前提と両立しない。文書が無いときの案内は、

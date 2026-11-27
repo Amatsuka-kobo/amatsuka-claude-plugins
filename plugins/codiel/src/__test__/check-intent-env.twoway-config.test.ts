@@ -128,6 +128,21 @@ test("ケース 16f: paths が絶対パス / ルート脱出", () => {
     })
   )
   expectTwoWayMatch(esc, "ルート脱出")
+
+  for (const architecture of [
+    "C:/ARCHITECTURE.md",
+    "C:\\ARCHITECTURE.md",
+    "//server/share/ARCHITECTURE.md",
+    "\\\\server\\share\\ARCHITECTURE.md"
+  ]) {
+    const win = gitRepo()
+    write(
+      win,
+      "metatron.config.json",
+      JSON.stringify({ version: 1, paths: { architecture } })
+    )
+    expectTwoWayMatch(win, `Windows の絶対パス ${architecture}`)
+  }
 })
 
 test("ケース 16f: シンボリックリンク経由の開始ディレクトリ", () => {

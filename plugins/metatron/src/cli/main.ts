@@ -1,4 +1,4 @@
-// metatron CLI のディスパッチ本体(契約 §11)。
+// metatron CLI のディスパッチ本体(契約 §12)。
 //
 // 経路は 2 層に分かれる(契約 §4-3、設計書 §12-1)。
 //
@@ -26,7 +26,7 @@ import {
 import { USAGE_LINES } from "./paths.js"
 import { runStageArchitecture } from "./stage.js"
 
-/** 常に exit 0 で返すサブコマンド(契約 §11 の「読」)。 */
+/** 常に exit 0 で返すサブコマンド(契約 §12 の「読」)。 */
 export const READ_SUBCOMMANDS = new Set(["get", "scan", "diff-architecture"])
 
 export const WRITE_SUBCOMMANDS = new Set([

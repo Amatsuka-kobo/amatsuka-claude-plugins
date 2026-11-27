@@ -1,4 +1,4 @@
-// CLI の引数解析。外部ライブラリを使わない(契約 §11 の呼び出し規約は
+// CLI の引数解析。外部ライブラリを使わない(契約 §12 の呼び出し規約は
 // `<subcommand> [--key value]` だけなので、標準の parseArgs も要らない)。
 
 export interface ParsedArgs {
@@ -9,11 +9,7 @@ export interface ParsedArgs {
 }
 
 // 値を取らないフラグ。ここに無い `--foo` は次の語を値として取る。
-const BOOLEAN_FLAGS = new Set([
-  "exclude-tagged",
-  "promotion-candidates",
-  "help"
-])
+const BOOLEAN_FLAGS = new Set(["help"])
 
 export function parseArgs(argv: readonly string[]): ParsedArgs {
   const positionals: string[] = []

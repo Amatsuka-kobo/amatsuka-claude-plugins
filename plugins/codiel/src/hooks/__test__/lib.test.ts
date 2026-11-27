@@ -691,6 +691,23 @@ test("R10: paths が絶対パスなら既定値に落ち、理由を warnings �
   expect(resolved.warnings.join("\n")).toContain("paths.architecture")
 })
 
+test("R10: ドライブレターと UNC の絶対パスも既定値に落ち、理由を warnings で返す", () => {
+  for (const architecture of [
+    "C:/ARCHITECTURE.md",
+    "C:\\ARCHITECTURE.md",
+    "//server/share/ARCHITECTURE.md",
+    "\\\\server\\share\\ARCHITECTURE.md"
+  ]) {
+    const root = mkTmp("lib-warn-win-")
+    writeConfig(root, { version: 1, paths: { architecture } })
+    const resolved = resolveDocPaths(root)
+    expect(resolved.architecture, architecture).toBe(
+      path.join(root, "docs", "ARCHITECTURE.md")
+    )
+    expect(resolved.warnings.length, architecture).toBe(1)
+  }
+})
+
 test("R10: paths がルート脱出なら既定値に落ち、理由を warnings で返す", () => {
   const root = mkTmp("lib-warn-escape-")
   writeConfig(root, {
@@ -831,6 +848,17 @@ test("R4: paths が絶対パス / ルート脱出のとき既定値に落ちて�
     paths: { architecture: "../outside/ARCHITECTURE.md" }
   })
   expectSameResolution(esc, "ルート脱出")
+
+  for (const architecture of [
+    "C:/ARCHITECTURE.md",
+    "C:\\ARCHITECTURE.md",
+    "//server/share/ARCHITECTURE.md",
+    "\\\\server\\share\\ARCHITECTURE.md"
+  ]) {
+    const win = mkTmp("lib-cmp-win-")
+    writeConfig(win, { version: 1, paths: { architecture } })
+    expectSameResolution(win, `Windows の絶対パス ${architecture}`)
+  }
 })
 
 test("R4: 壊れた設定・未知の version・型不整合で一致する", () => {

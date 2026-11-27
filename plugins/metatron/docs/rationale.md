@@ -87,6 +87,8 @@ deny hook が守るのは「**Edit / Write / NotebookEdit 経由の直接編集�
 
 ## なぜ SessionStart 注入なのか
 
+このセクションは 0.5 までの経緯の記録である。GOTCHAS の機能は 0.6.1 で廃止した。
+
 現行、ARCHITECTURE / GOTCHAS は「サブエージェントが作業前に必ず読む」という**指示**で運用されている。
 これには 2 つの弱点がある。
 

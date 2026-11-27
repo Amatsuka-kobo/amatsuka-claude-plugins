@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url"
 import { afterAll, expect, test } from "vitest"
 import { findSection, parseArchitecture } from "../../lib/architecture.js"
 import { lockPathFor } from "../../lib/file-lock.js"
-import { stagingDirFor } from "../../lib/staging.js"
+import { computeRecordHash, stagingDirFor } from "../../lib/staging.js"
 import { runTs } from "../../testing/run-ts.js"
 import { MAX_DIFF_LINES } from "../diff.js"
 import { READ_SUBCOMMANDS, WRITE_SUBCOMMANDS } from "../main.js"
@@ -582,7 +582,8 @@ test("S9: 廃止した種別の staging は commit-architecture が受け付け�
   const archPath = path.join(root, "docs", "ARCHITECTURE.md")
   const before = fs.readFileSync(archPath, "utf8")
 
-  // 改修前の stage-adr が残した staging を模す。kind を書き換えた記録は読めないものとして拒否される。
+  // 改修前の stage-adr が残した staging を模す。recordHash も打ち直し、改竄ではなく
+  // 廃止した種別として unknown_id で拒否されることを確かめる。
   const archInput = writeFile(
     root,
     "a.json",
@@ -594,11 +595,13 @@ test("S9: 廃止した種別の staging は commit-architecture が受け付け�
   const stagingId = (staged.json as Record<string, unknown>).stagingId as string
   const recordPath = path.join(stagingDirFor(root), `${stagingId}.json`)
   const record = JSON.parse(fs.readFileSync(recordPath, "utf8"))
-  fs.writeFileSync(recordPath, JSON.stringify({ ...record, kind: "adr" }))
+  const legacy = { ...record, kind: "adr" }
+  legacy.recordHash = computeRecordHash(legacy)
+  fs.writeFileSync(recordPath, JSON.stringify(legacy))
 
   const run = runCli(["commit-architecture", "--staging-id", stagingId], root)
-  expect(run.status).not.toBe(0)
-  expect((run.json as Record<string, unknown>).ok).toBe(false)
+  expect(run.status).toBe(1)
+  expect(run.json).toMatchObject({ ok: false, error: "unknown_id" })
   expect(fs.readFileSync(archPath, "utf8")).toBe(before)
 })
 
