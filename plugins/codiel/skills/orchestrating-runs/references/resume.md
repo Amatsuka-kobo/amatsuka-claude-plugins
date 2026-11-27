@@ -28,7 +28,7 @@ run を再開するときに読む。
    - `steps/` の下の、状態が `running` か `reviewing` の要素の `report.md`
    - implement では全グループの `steps/merge-test-<g>/report.md` と `steps/merge-fix-<g>/report.md`、test-loop では `steps/test-loop-project/report.md`
    - test-loop では最新の `test-run-<n>.md`、fix-loop では最新の `test-run-<n+1>.md`
-   - intent-sync では `steps/intent-sync/report.md`。このファイルに `設計資料:` で始まる行があれば、取り込み・設計資料の更新は済んでいる。ファイルがあってその行が無ければ、領域ファイルへの取り込みは済んでいるので、設計資料の更新(`syncing-intents` の手順 7)から続ける。
+   - intent-sync では `steps/intent-sync/report.md`。このファイルに `設計資料:` で始まる行があれば、取り込み・設計資料の更新は済んでいる。ファイルがあってその行が無ければ、領域ファイルへの取り込みと古い記述の改訂・削除は済んでいるので、設計資料の更新(`syncing-intents` の手順 7)から続ける。
 
    discuss で中断していたときの再開位置(アジェンダ作成から/未決論点から/最終確認から)は、`facilitating-design-discussions` の「中断再開」に従う。design で `design.md` が既にあるときは、ウォークスルーの再提示から再開する。
 7. `state.status` が `awaiting_human` なら、該当フェーズの `evaluationId` / `note` を手がかりに直近の findings を再提示し、`raguel-gating` の ASK の手順(裁定 A / 裁定 B / 中止)に従う。人の裁定を受けてから続行する。
